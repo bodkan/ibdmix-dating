@@ -1,5 +1,6 @@
 library(readr)
 library(dplyr)
+library(tidyr)
 library(ggplot2)
 library(sf)
 library(rnaturalearth)
@@ -7,8 +8,8 @@ library(rnaturalearth)
 library(GenomicRanges)
 library(ggbio)
 
-set <- "Modern"
-# set <- "Ancient"
+#set <- "Modern"
+set <- "Ancient"
 
 # load Alba's tracts data and MesoNeo metadata ------------------------------------------------
 
@@ -263,6 +264,45 @@ abline(v = c(106300000, 124700000), col = "red")
 
 dev.off()
 
+pdf(paste0("windows_", set, ".pdf"), 10, 7)
+
+windows_gr %>%
+  filter(start >= 100000000 & end <= 130000000) %>% {
+plot(.$midpoint, .$coverage, ylab = "mean coverage in sliding window", type = "o", ylim = c(0, 0.3), pch = 20)
+abline(v = c(106300000, 124700000), col = "red")
+}
+
+dev.off()
+
 
 
 saveRDS(windows_gr, paste0("windows_", set, ".rds"))
+
+
+
+
+# modern vs ancient windows -------------------------------------------------------------------
+
+if (file.exists("windows_Ancient.rds") && file.exists("windows_Modern.rds")) {
+
+win_ancient <- readRDS("windows_Ancient.rds")
+win_ancient$set <- "ancient"
+win_modern <- readRDS("windows_Modern.rds")
+win_modern$set <- "modern"
+
+win <- rbind(
+  dplyr::as_tibble(win_ancient) %>% select(chrom = seqnames, start, end, coverage, set, gap),
+  dplyr::as_tibble(win_modern) %>% select(chrom = seqnames, start, end, coverage, set, gap)
+) %>%
+  pivot_wider(names_from = "set", values_from = "coverage") %>%
+  mutate(desert = start >= 106300000 & end <= 124700000)
+
+ggplot() +
+  geom_point(data = filter(win, !desert), aes(ancient, modern, color = desert), color = "lightgray") +
+  geom_point(data = filter(win, desert), aes(ancient, modern, color = desert), color = "black") +
+  geom_abline(slope = 1, linetype = "dashed") +
+  scale_x_log10() +
+  scale_y_log10()
+}
+
+unlink("Rplots.pdf")
