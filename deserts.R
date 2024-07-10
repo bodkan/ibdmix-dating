@@ -7,8 +7,8 @@ library(rnaturalearth)
 library(GenomicRanges)
 library(ggbio)
 
-# set <- "Modern"
-set <- "Ancient"
+set <- "Modern"
+# set <- "Ancient"
 
 # load Alba's tracts data and MesoNeo metadata ------------------------------------------------
 
@@ -62,9 +62,9 @@ p_tracts <-
       panel.border = element_blank(),
       panel.grid = element_blank()
     )
-p_tracts
+# p_tracts
 
-ggplot2::ggsave(paste0("tracts_", set, ".pdf"), width = 10, height = 7)
+ggplot2::ggsave(paste0("tracts_", set, ".pdf"), p_tracts, width = 10, height = 7)
 
 
 
