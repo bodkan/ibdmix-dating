@@ -88,7 +88,7 @@ tracts_gr
 
 orig_par <- par(no.readonly = TRUE)
 
-pdf("test.pdf", 10, 10)
+pdf("windows_test.pdf", 10, 10)
 
 par(mfrow = c(4, 1))
 
@@ -255,7 +255,7 @@ average_coverage_per_window <- function(windows_gr, cov) {
 mcols(windows_gr)$coverage <- average_coverage_per_window(windows_gr, as.numeric(cov))
 mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
 
-pdf(paste0(set, ".pdf"), 10, 7)
+pdf(paste0("windows_", set, ".pdf"), 10, 7)
 
 plot(windows_gr$midpoint, windows_gr$coverage,
      ylab = "mean coverage in sliding window", type = "l", xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1))
