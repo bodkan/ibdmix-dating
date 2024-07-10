@@ -1,3 +1,8 @@
+args <- commandArgs(trailingOnly = TRUE)
+set <- args[1]
+if (!set %in% c("Modern", "Ancient"))
+  stop("Invalid 'set' value", call. = FALSE)
+
 library(readr)
 library(dplyr)
 library(tidyr)
@@ -7,13 +12,6 @@ library(rnaturalearth)
 
 library(GenomicRanges)
 library(ggbio)
-
-args <- commandArgs(trailingOnly = TRUE)
-
-set <- args[1]
-
-if (set %in% c("Modern", "Ancient"))
-  stop("Invalid 'set' value", call. = FALSE)
 
 # load Alba's tracts data and MesoNeo metadata ------------------------------------------------
 
