@@ -27,6 +27,7 @@ p_tracts <-
     geom_segment(linewidth = 1) +
     geom_vline(xintercept = c(106300000, 124700000), color = "red") +
     xlim(1, max(tracts$end)) +
+    labs(x = "position along a chromosome [bp]", y = "each row = tracts in an individual") +
     theme_bw() +
     theme(
       axis.text.y = element_blank(),
@@ -40,8 +41,8 @@ p_tracts <-
 
 tracts_gr <- GRanges(
   seqnames = "chr7",
-  ranges = IRanges(c(2, 4, 10, 12), c(6, 6, 17, 15)),
-  ID = c("ind1", "ind2", "ind1", "ind3")
+  ranges = IRanges(c(2, 4, 12, 12, 5), c(6, 6, 17, 15, 7)),
+  ID = c("ind1", "ind2", "ind1", "ind3", "ind4")
 )
 seqlengths(tracts_gr) <- 20
 
@@ -51,15 +52,19 @@ ggplot(tracts_gr) +
   geom_rect(aes(group = ID, fill = ID)) +
   scale_x_continuous(breaks = seq_len(seqlengths(tracts_gr))) +
   coord_cartesian(xlim = c(1, seqlengths(tracts_gr))) +
+  theme_minimal() +
   theme(panel.grid = element_blank())
 
 orig_par <- par(no.readonly = TRUE)
 
-par(mfrow = c(2, 1))
+par(mfrow = c(4, 1))
+
+plot(NA, xlim = c(1, seqlengths(tracts_gr)), ylim = c(1, length(unique(tracts_gr$ID))), ylab = "individual")
+segments(x0 = start(tracts_gr), x1 = end(tracts_gr), y0 = as.numeric(factor(tracts_gr$ID)), y1 = as.numeric(factor(tracts_gr$ID)))
 
 cov <- coverage(tracts_gr)
 cov <- cov[[1]]
-plot(cov, type = "o", xlim = c(1, seqlengths(tracts_gr)))
+plot(seq_along(cov), cov, type = "o", xlim = c(1, seqlengths(tracts_gr)), ylab = "coverage per site")
 
 # prop_cov <- cov / length(unique(tracts_gr$ID))
 # prop_cov
@@ -67,9 +72,7 @@ plot(cov, type = "o", xlim = c(1, seqlengths(tracts_gr)))
 
 runcov <- runmean(cov, 5)
 runcov
-plot(as.numeric(runcov[[1]]), type="o", xlim = c(0, seqlengths(tracts_gr)))
-
-par(orig_par)
+# plot(seq_along(runcov), runcov, type = "o", xlim = c(0, seqlengths(tracts_gr)), ylab = "runmean() coverage")
 
 chrom_length <- seqlengths(tracts_gr)
 window_size <- 5
@@ -82,7 +85,7 @@ seqlengths(windows_gr) <- 20
 windows_gr
 
 # sanity check by plotting overlapping windows sequentially as tiles
-autoplot(windows_gr, aes(group = id), color = NA) + xlim(1, seqlengths(windows_gr))
+# autoplot(windows_gr, aes(group = id), color = NA) + xlim(1, seqlengths(windows_gr))
 
 gaps_gr <- GRanges(seqnames = "chr7", ranges = IRanges(start = 8, end = 11))
 
@@ -90,23 +93,27 @@ to_remove <- queryHits(findOverlaps(windows_gr, gaps_gr))
 windows_gr$gap <- FALSE
 windows_gr[to_remove]$gap <- TRUE
 
+plot(NA, xlim = c(1, seqlengths(windows_gr)), ylim = c(1, length(windows_gr)), ylab = "sliding window number")
+segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id))
+
 # sanity check by plotting overlapping windows sequentially as tiles
-autoplot(windows_gr, aes(group = id, fill = gap), color = NA) + xlim(1, seqlengths(windows_gr))
+# autoplot(windows_gr, aes(group = id, fill = gap), color = NA) + xlim(1, seqlengths(windows_gr))
 
 # count overlaps between windows and tracts
-cov <- countOverlaps(windows_gr, tracts_gr)
+average_coverage_per_window <- function(windows, coverage) {
+  sapply(seq_along(windows), function(i) {
+    start_idx <- start(windows[i])
+    end_idx <- end(windows[i])
+    mean(coverage[start_idx:end_idx])
+  })
+}
+mcols(windows_gr)$coverage <- average_coverage_per_window(windows_gr, as.numeric(cov))
+mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
 
-sliding_window_coverage <- tibble(
-  start = start(windows_gr),
-  end = end(windows_gr),
-  coverage = cov,
-  gap = windows_gr$gap
-) %>%
-  mutate(midpoint = (start + end) / 2,
-         coverage = ifelse(gap, NA, coverage))
+plot(windows_gr$midpoint, windows_gr$coverage,
+     ylab = "mean coverage in sliding window", type = "o", xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, max(sliding_window_coverage$coverage)))
 
-plot(sliding_window_coverage$midpoint, sliding_window_coverage$coverage,
-     type = "o", xlim = c(1, seqlengths(tracts_gr)))
+par(orig_par)
 
 
 
