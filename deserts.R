@@ -8,8 +8,12 @@ library(rnaturalearth)
 library(GenomicRanges)
 library(ggbio)
 
-#set <- "Modern"
-set <- "Ancient"
+args <- commandArgs(trailingOnly = TRUE)
+
+set <- args[1]
+
+if (set %in% c("Modern", "Ancient"))
+  stop("Invalid 'set' value", call. = FALSE)
 
 # load Alba's tracts data and MesoNeo metadata ------------------------------------------------
 
