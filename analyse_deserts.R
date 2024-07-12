@@ -355,18 +355,21 @@ p1 <- win %>%
   {
     ggplot(data = .) +
     geom_line(aes(midpoint, ancient), color = "orange") +
-    geom_point(data = filter(., ancient > 0), aes(midpoint, ancient, color = "ancient"), size = 0.8) +
+    geom_point(data = filter(., ancient > 0), aes(midpoint, ancient, color = "ancient individuals"), size = 0.8) +
     geom_line(aes(midpoint, modern), color = "blue") +
-    geom_point(data = filter(., modern > 0), aes(midpoint, modern, color = "modern"), size = 0.8) +
-    geom_vline(xintercept = desert_coords, color = "red", linetype = "dashed") +
+    geom_point(data = filter(., modern > 0), aes(midpoint, modern, color = "present-day individuals"), size = 0.8) +
+    geom_vline(data = data.frame(coord = desert_coords), aes(xintercept = coord, linetype = "desert boundary"),
+               color = "red") +
     scale_color_manual(values = c("orange", "blue")) +
-    guides(color = guide_legend("data set", override.aes = list(size = 5))) +
+    guides(color = guide_legend("", override.aes = list(size = 5)),
+           linetype = guide_legend("")) +
     labs(x = "genomic coordinate [bp]", y = "proportion of Neanderthal ancestry") +
     scale_x_continuous(labels = scales::comma) +
+    scale_linetype_manual(values = "dashed") +
     theme_minimal() +
     theme(legend.position = "bottom") +
     ggtitle(paste("Archaic ancestry desert on chromosome", gsub("chr", "", win$chrom[1])))
-  }
+  }; p1
 
 mean(win$modern)
 mean(win$ancient)
@@ -382,11 +385,11 @@ win %>% filter(desert) %>% { cor(.$ancient, .$modern) }
 data_range <- c(win$ancient, win$modern) %>% .[. > 0] %>% range
 
 p2 <- ggplot() +
+  geom_smooth(data = filter(win, desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert),
+              color = "red", fill = "black", method = "lm", linetype = "dashed", linewidth = 0.8, alpha = 0.35) +
   geom_point(data = filter(win, !desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert, shape = "outside desert"),
              color = "lightgray", alpha = 0.5) +
   geom_point(data = filter(win, desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert, shape = "within desert"), color = "black") +
-  geom_smooth(data = filter(win, desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert),
-              color = "black", fill = "black", method = "lm", linetype = "dashed", linewidth = 0.8, alpha = 0.35) +
   geom_abline(slope = 1, linetype = "dashed") +
   geom_hline(aes(color = "modern", yintercept = mean(win$modern)), linetype = "dashed", color = "blue") +
   geom_vline(aes(color = "ancient", xintercept = mean(win$ancient)), linetype = "dashed", color = "orange") +
@@ -399,9 +402,11 @@ p2 <- ggplot() +
   theme(legend.position = "bottom") +
   guides(shape = guide_legend("window", override.aes = list(alpha = 1, size = 3)),
          linetype = "none") +
-  scale_shape_manual(values = c(4, 20)); p2
+  scale_shape_manual(values = c(4, 20))
 
-cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
+p_panels <- cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
+
+ggsave(filename = "desert_comparison.pdf", plot = p_panels, width = 13, height = 7, units = "in")
 
 win %>%
   filter(desert) %>%
