@@ -281,6 +281,19 @@ plot(windows_gr$midpoint, windows_gr$coverage,
 
 ## Analysis of tracts inferred in real data
 
+Convert the IBDmix tracts data frame to `GRanges`:
+
+```{r}
+library(BSgenome.Hsapiens.UCSC.hg19)
+
+tracts_gr <- tracts %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
+genome(tracts_gr) <- "hg19"
+
+tracts_gr
+```
+
 ### Fetch gaps from USCS
 
 ```{r}
@@ -312,6 +325,10 @@ gaps_gr %>%
 ```
 
 ### Generate sliding windows along the chromosome
+
+```{r}
+chrom <- "chr7"
+```
 
 ```{r}
 chrom_length <- seqlengths(tracts_gr)[chrom]
@@ -356,58 +373,7 @@ segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_g
          col = windows_gr$gap + 1)
 ```
 
-```{r}
-# count overlaps between windows and tracts
-average_coverage_per_window <- function(windows_gr, cov) {
-  sapply(seq_along(windows_gr), function(i) {
-    start_idx <- start(windows_gr[i])
-    end_idx <- end(windows_gr[i])
-    mean(cov[start_idx:end_idx])
-  })
-}
-mcols(windows_gr)$coverage <- average_coverage_per_window(windows_gr, as.numeric(cov))
-mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
-
-pdf(paste0("results/windows_", set, ".pdf"), 10, 7)
-
-desert_df <- subset(desert_coords, chrom == as.character(seqnames(windows_gr))[1])
-
-plot(windows_gr$midpoint, windows_gr$coverage,
-     ylab = "mean coverage in sliding window", type = "l", xlim = c(1, seqlengths(windows_gr)), ylim = c(0, 1))
-# abline(v = c(106300000, 124700000), col = "red")
-abline(v = desert_df[c("start", "end")], col = "red")
-
-dev.off()
-
-pdf(paste0("results/desert_windows_", set, ".pdf"), 10, 7)
-
-windows_gr %>%
-  # filter(start >= 100000000 & end <= 130000000) %>% {
-  filter(start >= desert_df$start * 0.9 & end <= desert_df$end * 1.1) %>% {
-plot(.$midpoint, .$coverage, ylab = "mean coverage in sliding window", type = "o", ylim = c(0, 0.3), pch = 20)
-# abline(v = c(106300000, 124700000), col = "red")
-abline(v = desert_df[c("start", "end")], col = "red")
-}
-
-dev.off()
-```
-
-Convert the IBDmix tracts data frame to `GRanges`:
-
-```{r}
-library(BSgenome.Hsapiens.UCSC.hg19)
-
-tracts_gr <- tracts %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
-
-seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
-genome(tracts_gr) <- "hg19"
-
-tracts_gr
-```
-
-```{r}
-chrom <- "chr7"
-```
+### Analyse tracts in windows
 
 ```{r}
 windows_gr <- generate_windows(tracts_gr, gaps_gr, chrom = "chr7", window_size = 200e3, step_size = 50e3)
@@ -424,7 +390,6 @@ ancestry_gr <- rbind(
   dplyr::as_tibble(ancestry_ancient_gr) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap)
 ) %>%
   pivot_wider(names_from = "set", values_from = "coverage") %>%
-  # mutate(desert = start >= 106300000 & end <= 124700000)
   mutate(within_desert = start >= desert$start & end <= desert$end)
 
 p1 <- ancestry_gr %>%
@@ -446,7 +411,7 @@ p1 <- ancestry_gr %>%
     theme_minimal() +
     theme(legend.position = "bottom") +
     ggtitle(paste("Archaic ancestry desert on chromosome", gsub("chr", "", .$chrom[1])))
-  }; p1
+  }
 ```
 
 ```{r}
