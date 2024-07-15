@@ -638,7 +638,7 @@ ancestry_ancient_gr <- compute_ancestry(windows_gr, tracts_gr, "Ancient")
 ```
 
 ``` r
-desert <- subset(desert_coords, chrom == unique(chrom[1]))
+desert <- desert_coords[desert_coords$chrom == chrom, ]
 
 ancestry_gr <- rbind(
   dplyr::as_tibble(ancestry_modern_gr) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap),
@@ -678,7 +678,7 @@ mean(ancestry_gr$ancient)
 
 ``` r
 ancestry_gr %>% filter(within_desert) %>% { cor(.$ancient, .$modern) }
-#> [1] 0.9980341
+#> [1] 0.9454776
 ```
 
 # desert_win \<- win %\>% filter(desert)
@@ -739,10 +739,10 @@ ancestry_gr %>%
 #>   name                                                             value
 #>   <chr>                                                            <dbl>
 #> 1 mean(ancient == 0 & modern > 0)                                 0     
-#> 2 mean(ancient > 0 & modern == 0)                                 0.0588
-#> 3 mean((ancient == 0 & modern == 0) | (ancient > 0 & modern > 0)) 0.941
+#> 2 mean(ancient > 0 & modern == 0)                                 0.0265
+#> 3 mean((ancient == 0 & modern == 0) | (ancient > 0 & modern > 0)) 0.974
 
 ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 100 } %>% summary
 #>     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
-#> 0.000000 0.000000 0.000000 0.005812 0.000000 0.168188
+#> 0.000000 0.000000 0.000000 0.004347 0.000000 0.178234
 ```
