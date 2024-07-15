@@ -1,0 +1,501 @@
+```{r}
+suppressPackageStartupMessages({
+  library(readr)
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  library(sf)
+  library(rnaturalearth)
+
+  library(GenomicRanges)
+  library(ggbio)
+  library(plyranges)
+})
+
+source(here::here("utils.R"))
+```
+
+```{r}
+# IBDmix desert coordinates from Table S8 of Chan et al., 202 ---------------------------------
+# (https://ars.els-cdn.com/content/image/1-s2.0-S0092867420300593-mmc1.pdf)
+# (https://ars.els-cdn.com/content/image/1-s2.0-S0092867420300593-figs4_lrg.jpg)
+
+deserts_df <- tribble(
+  ~chrom, ~start_ss, ~end_ss,   ~start_ibdmix, ~end_ibdmix,
+  "chr1", 102200000, 114900000, 105400000,     120600000,
+  "chr3", 76500000,  90500000,  74100000,      89300000,
+  "chr7", 106300000, 124700000, 106200000,     123200000,
+  "chr8", 53900000,  66000000,  49400000,      66500000
+) %>% pivot_longer(cols = c(starts_with("start_"), starts_with("end_")),
+                   names_to = c(".value", "method"), names_sep = "_")
+```
+
+```{r}
+# combined Neanderthal and Denisovan deserts
+# (https://www.science.org/doi/suppl/10.1126/science.aad9416/suppl_file/vernot-sm.pdf)
+ss2_deserts_gr <- tribble(
+  ~chrom, ~start, ~end,
+  "chr1", 104000000, 114900000,
+  "chr3", 76500000, 90500000,
+  "chr7", 113600000, 124700000,
+  "chr8", 54500000, 65400000
+) %>% makeGRangesFromDataFrame()
+```
+
+```{r}
+ss_deserts_gr <- filter(deserts_df, method == "ss") %>% makeGRangesFromDataFrame()
+ibdmix_deserts_gr <- filter(deserts_df, method == "ibdmix") %>% makeGRangesFromDataFrame()
+deserts_gr <- pintersect(ss_deserts_gr, ibdmix_deserts_gr)
+deserts2_gr <- pintersect(ss2_deserts_gr, ibdmix_deserts_gr)
+
+ss_deserts_gr$width <- width(ss_deserts_gr) / 1e6
+ss2_deserts_gr$width <- width(ss2_deserts_gr) / 1e6
+ibdmix_deserts_gr$width <- width(ibdmix_deserts_gr) / 1e6
+deserts_gr$width <- width(deserts_gr) / 1e6
+deserts2_gr$width <- width(deserts2_gr) / 1e6
+```
+
+```{r}
+ss_deserts_gr
+ss2_deserts_gr
+ibdmix_deserts_gr
+deserts_gr
+deserts2_gr
+```
+
+```{r}
+deserts_gr <- deserts2_gr
+desert_coords <- deserts_gr %>% as.data.frame() %>% select(chrom = seqnames, start, end)
+desert_coords
+```
+
+
+## Load and inspect GeoGenetics metadata
+
+```{r}
+metadata <- read_metadata()
+```
+
+```{r}
+glimpse(metadata)
+```
+
+Plot the spatial distribution of all ancient samples in the imputed data:
+
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+sf::st_agr(world) <- "constant"
+bbox <- st_as_sfc(st_bbox(c(xmin = -25, xmax = 65, ymin = 25, ymax = 70), crs = st_crs(world)))
+western_eurasia <- st_crop(st_make_valid(world), bbox)
+
+metadata %>%
+  filter(!is.na(latitude) & !is.na(longitude)) %>%
+  st_as_sf(coords = c("longitude", "latitude")) %>%
+  st_set_crs(4326) %>%
+  ggplot() +
+    geom_sf(data = western_eurasia) +
+    geom_sf(aes(color = region)) +
+    coord_sf(crs = 3035)
+```
+
+Out of the various "age" columns in the GeoGenetics metadata, which one is actually usable?
+
+```{r}
+filter(metadata, groupAge == "Ancient") %>%
+  summarise_at(c("age14C", "ageAverage", "ageRaw"),
+               list(total = ~length(.), missing = ~sum(is.na(.x)), prop = ~mean(is.na(.x)))) %>%
+  pivot_longer(cols = everything(), names_to = "name") %>%
+  separate(name, into = c("measure", "type"), sep = "_", extra = "merge")
+```
+
+Looks like `ageAverage` has a value for every individual:
+
+```{r}
+metadata %>%
+  filter(groupAge == "Ancient") %>%
+  ggplot() +
+  geom_histogram(aes(ageAverage))
+```
+
+## Inspect Neanderthal tracts in ancient and present-day individuals
+
+```{r}
+tracts_modern <- read_tracts("Modern", metadata)
+tracts_ancient <- read_tracts("Ancient", metadata)
+
+tracts <- rbind(tracts_modern, tracts_ancient)
+
+tracts
+```
+
+```{r}
+tracts %>%
+filter(chrom %in% as.character(seqnames(deserts_gr))) %>%
+ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
+  geom_segment(linewidth = 1) +
+  geom_rect(data = desert_coords, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
+  geom_vline(data = desert_coords, aes(xintercept = start), linetype = "dashed", color = "red") +
+  geom_vline(data = desert_coords, aes(xintercept = end), linetype = "dashed", color = "red") +
+  labs(x = "position along a chromosome [bp]", y = "each row = tracts in an individual") +
+  theme_bw() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    panel.border = element_blank(),
+    panel.grid = element_blank()
+  ) +
+  scale_x_continuous(labels = scales::comma) +
+  facet_grid(set ~ chrom, scales = "free") +
+  ggtitle("Neanderthal tracts in Eurasians")
+```
+
+```{r}
+ggplot2::ggsave(paste0("tracts.pdf"), width = 13, height = 7)
+```
+
+## Testing code for window-based tract analysis on a toy example
+
+### Generate testing tracts in a few individuals
+
+```{r}
+tracts_gr <- GRanges(
+  seqnames = "chr7",
+  ranges = IRanges(c(2, 4, 12, 4, 12, 5), c(6, 6, 17, 7, 15, 7)),
+  ID = c("ind1", "ind2", "ind1", "ind3", "ind3", "ind4")
+)
+seqlengths(tracts_gr) <- 20
+
+tracts_gr
+```
+
+```{r}
+ggplot(tracts_gr) +
+  geom_rect(aes(group = ID, fill = ID)) +
+  scale_x_continuous(breaks = seq_len(seqlengths(tracts_gr))) +
+  coord_cartesian(xlim = c(1, seqlengths(tracts_gr))) +
+  theme_minimal() +
+  theme(panel.grid = element_blank())
+```
+
+<!-- plot(NA, xlim = c(1, seqlengths(tracts_gr)), ylim = c(1, length(unique(tracts_gr$ID))), ylab = "individual") -->
+<!-- segments(x0 = start(tracts_gr), x1 = end(tracts_gr), y0 = as.numeric(factor(tracts_gr$ID)), y1 = as.numeric(factor(tracts_gr$ID)), -->
+<!--          col = factor(tracts_gr$ID)) -->
+
+### Compute coverage of Neanderthal tracts per site (i.e. proportion of Neanderthal ancestry per site):
+
+```{r}
+cov <- coverage(tracts_gr)
+cov <- cov[[1]]
+cov <- cov / length(unique(tracts_gr$ID))
+
+plot(seq_along(cov), cov, type = "o",
+     xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1),
+     ylab = "coverage per site")
+```
+
+# prop_cov <- cov / length(unique(tracts_gr$ID))
+# prop_cov
+# plot(prop_cov[[1]], type = "o", xlim = c(1, seqlengths(tracts_gr)))
+
+# runcov <- runmean(cov, 5)
+# runcov
+# plot(seq_along(runcov), runcov, type = "o", xlim = c(0, seqlengths(tracts_gr)), ylab = "runmean() coverage")
+
+### Generate sliding windows
+
+```{r}
+chrom_length <- seqlengths(tracts_gr)
+window_size <- 5
+step_size <- 3
+
+windows <- slidingWindows(IRanges(start = 1, end = chrom_length), width = window_size, step = step_size)
+windows_gr <- GRanges(seqnames = "chr7", ranges = unlist(windows))
+windows_gr$id <- factor(seq_len(length(windows_gr)))
+seqlengths(windows_gr) <- seqlengths(tracts_gr)
+windows_gr
+```
+
+Sanity check by plotting overlapping windows sequentially as tiles:
+
+```{r}
+autoplot(windows_gr, aes(group = id), color = NA) + xlim(1, seqlengths(windows_gr))
+```
+
+### Generate testing "mapping gaps", "centromeres", etc.
+
+```{r}
+gaps_gr <- GRanges(seqnames = "chr7", ranges = IRanges(start = 8, end = 11))
+
+to_remove <- queryHits(findOverlaps(windows_gr, gaps_gr))
+windows_gr$gap <- FALSE
+windows_gr[to_remove]$gap <- TRUE
+```
+
+```{r}
+plot(NA, xlim = c(1, seqlengths(windows_gr)), ylim = c(1, length(windows_gr)), ylab = "sliding window number")
+segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id),
+         col = windows_gr$gap + 1)
+```
+
+### Compute windows-based coverage (i.e. proportion of Neanderthal ancestry per window):
+
+```{r}
+average_coverage_per_window <- function(windows_gr, cov) {
+  sapply(seq_along(windows_gr), function(i) {
+    start_idx <- start(windows_gr[i])
+    end_idx <- end(windows_gr[i])
+    mean(cov[start_idx:end_idx])
+  })
+}
+mcols(windows_gr)$coverage <- average_coverage_per_window(windows_gr, as.numeric(cov))
+mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
+```
+
+```{r}
+plot(windows_gr$midpoint, windows_gr$coverage,
+     ylab = "mean coverage in sliding window", type = "o", xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1))
+```
+
+
+## Analysis of tracts inferred in real data
+
+Convert the IBDmix tracts data frame to `GRanges`:
+
+```{r}
+library(BSgenome.Hsapiens.UCSC.hg19)
+
+tracts_gr <- tracts %>%
+  filter(set == "Modern") %>%
+  makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
+genome(tracts_gr) <- "hg19"
+
+tracts_gr
+```
+
+Compute coverage per window (i.e. proportion of Neanderthal ancestry per window):
+
+```{r}
+# first compute coverage...
+cov <- coverage(filter(tracts_gr, set == "Modern"))
+# ... then convert that to proportions
+cov <- lapply(cov, function(x) x / length(unique(tracts$ID)))
+```
+
+
+### Fetch gaps from USCS
+
+```{r}
+library(ggbio)
+library(rtracklayer)
+library(plyranges)
+
+mySession <- browserSession()
+genome(mySession) <- "hg19"
+query <- ucscTableQuery(mySession, table = "gap")
+
+# gap table columns: https://genome.ucsc.edu/cgi-bin/hgTables?db=hg38&hgta_group=map&hgta_track=gap&hgta_table=gap&hgta_doSchema=describe+table+schema
+gaps <- getTable(query) %>%
+  dplyr::filter(grepl("chr\\d+$", chrom)) %>% as_tibble() %>%
+  filter(chrom %in% as.character(seqnames(deserts_gr)))
+
+gaps_gr <- makeGRangesFromDataFrame(gaps, starts.in.df.are.0based = TRUE, keep.extra.columns = TRUE, ignore.strand = TRUE)
+seqlengths(gaps_gr) <- seqlengths(tracts_gr)[as.character(seqnames(deserts_gr))]
+genome(gaps_gr) <- genome(tracts_gr)
+
+gaps_gr
+```
+
+```{r}
+gaps_gr %>%
+  autoplot(aes(fill = type), color = NA) +
+  theme_bw() +
+  theme(panel.grid = element_blank(), legend.position = "bottom")
+```
+
+### Generate sliding windows along the chromosome
+
+```{r}
+chrom <- "chr7"
+```
+
+```{r}
+chrom_length <- seqlengths(tracts_gr)[chrom]
+window_size <- 200e3
+step_size <- 50e3
+
+windows <- slidingWindows(IRanges(start = 1, end = chrom_length), width = window_size, step = step_size)
+windows_gr <- GRanges(seqnames = chrom, ranges = unlist(windows))
+windows_gr$id <- factor(seq_len(length(windows_gr)))
+seqlengths(windows_gr) <- seqlengths(tracts_gr)[chrom]
+genome(windows_gr) <- genome(tracts_gr)
+windows_gr
+```
+
+Mark windows hitting gaps to be removed:
+
+```{r}
+to_remove <- queryHits(findOverlaps(windows_gr, gaps_gr))
+windows_gr$gap <- FALSE
+windows_gr[to_remove]$gap <- TRUE
+```
+
+As sanity check, plot all windows along the chromosome:
+
+```{r}
+plot(NA, xlim = c(1, seqlengths(windows_gr)), ylim = c(1, length(windows_gr)), ylab = "sliding window number")
+segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id),
+         col = windows_gr$gap + 1)
+```
+
+Plot only the first and last 2 Mb of windows on both ends of the chromosome:
+
+```{r}
+plotting_cutoff <- 2e6
+
+plot(NA, xlim = c(1, plotting_cutoff), ylim = c(1, length(windows_gr[start(windows_gr) < plotting_cutoff])), ylab = "sliding window number")
+segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id),
+         col = windows_gr$gap + 1)
+
+plot(NA, xlim = c(seqlengths(windows_gr) - plotting_cutoff, seqlengths(windows_gr)), ylim = c(length(windows_gr) - length(windows_gr[start(windows_gr) < plotting_cutoff]), length(windows_gr)), ylab = "sliding window number")
+segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id),
+         col = windows_gr$gap + 1)
+```
+
+```{r}
+# count overlaps between windows and tracts
+average_coverage_per_window <- function(windows_gr, cov) {
+  sapply(seq_along(windows_gr), function(i) {
+    start_idx <- start(windows_gr[i])
+    end_idx <- end(windows_gr[i])
+    mean(cov[start_idx:end_idx])
+  })
+}
+mcols(windows_gr)$coverage <- average_coverage_per_window(windows_gr, as.numeric(cov))
+mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
+
+pdf(paste0("windows_", set, ".pdf"), 10, 7)
+
+desert_df <- subset(desert_coords, chrom == as.character(seqnames(windows_gr))[1])
+
+plot(windows_gr$midpoint, windows_gr$coverage,
+     ylab = "mean coverage in sliding window", type = "l", xlim = c(1, seqlengths(windows_gr)), ylim = c(0, 1))
+# abline(v = c(106300000, 124700000), col = "red")
+abline(v = desert_df[c("start", "end")], col = "red")
+
+dev.off()
+
+pdf(paste0("desert_windows_", set, ".pdf"), 10, 7)
+
+windows_gr %>%
+  # filter(start >= 100000000 & end <= 130000000) %>% {
+  filter(start >= desert_df$start * 0.9 & end <= desert_df$end * 1.1) %>% {
+plot(.$midpoint, .$coverage, ylab = "mean coverage in sliding window", type = "o", ylim = c(0, 0.3), pch = 20)
+# abline(v = c(106300000, 124700000), col = "red")
+abline(v = desert_df[c("start", "end")], col = "red")
+}
+
+dev.off()
+
+
+
+saveRDS(windows_gr, paste0("windows_", set, ".rds"))
+
+
+unlink("Rplots.pdf")
+```
+
+```{r}
+windows_gr <- generate_windows(tracts_gr, gaps_gr, chrom = "chr7", window_size = 200e3, step_size = 50e3)
+windows_gr <- compute_ancestry(windows_gr, cov)
+```
+
+
+# modern vs ancient windows -------------------------------------------------------------------
+
+if (file.exists("windows_Ancient.rds") && file.exists("windows_Modern.rds")) {
+
+win_ancient <- readRDS("windows_Ancient.rds")
+win_ancient$set <- "ancient"
+win_modern <- readRDS("windows_Modern.rds")
+win_modern$set <- "modern"
+
+win <- rbind(
+  dplyr::as_tibble(win_ancient) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap),
+  dplyr::as_tibble(win_modern) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap)
+) %>%
+  pivot_wider(names_from = "set", values_from = "coverage") %>%
+  # mutate(desert = start >= 106300000 & end <= 124700000)
+  mutate(desert = start >= desert_coords[1] & end <= desert_coords[2])
+
+p1 <- win %>%
+  filter(start >= desert_coords[1] * 0.9 & end <= desert_coords[2] * 1.1) %>%
+  {
+    ggplot(data = .) +
+    geom_line(aes(midpoint, ancient), color = "orange") +
+    geom_point(data = filter(., ancient > 0), aes(midpoint, ancient, color = "ancient individuals"), size = 0.8) +
+    geom_line(aes(midpoint, modern), color = "blue") +
+    geom_point(data = filter(., modern > 0), aes(midpoint, modern, color = "present-day individuals"), size = 0.8) +
+    geom_vline(data = data.frame(coord = desert_coords), aes(xintercept = coord, linetype = "desert boundary"),
+               color = "red") +
+    scale_color_manual(values = c("orange", "blue")) +
+    guides(color = guide_legend("", override.aes = list(size = 5)),
+           linetype = guide_legend("")) +
+    labs(x = "genomic coordinate [bp]", y = "proportion of Neanderthal ancestry") +
+    scale_x_continuous(labels = scales::comma) +
+    scale_linetype_manual(values = "dashed") +
+    theme_minimal() +
+    theme(legend.position = "bottom") +
+    ggtitle(paste("Archaic ancestry desert on chromosome", gsub("chr", "", win$chrom[1])))
+  }; p1
+
+mean(win$modern)
+mean(win$ancient)
+
+win %>% filter(desert) %>% { cor(.$ancient, .$modern) }
+
+# desert_win <- win %>% filter(desert)
+# res <- lm(modern ~ ancient, data = desert_win)
+# plot(desert_win$ancient, desert_win$modern, xlim = c(0, 0.01), ylim = c(0, 0.01))
+# abline(a = 0, b = 1)
+# abline(res, col = "red")
+
+data_range <- c(win$ancient, win$modern) %>% .[. > 0] %>% range
+
+p2 <- ggplot() +
+  geom_smooth(data = filter(win, desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert),
+              color = "red", fill = "black", method = "lm", linetype = "dashed", linewidth = 0.8, alpha = 0.35) +
+  geom_point(data = filter(win, !desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert, shape = "outside desert"),
+             color = "lightgray", alpha = 0.5) +
+  geom_point(data = filter(win, desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert, shape = "within desert"), color = "black") +
+  geom_abline(slope = 1, linetype = "dashed") +
+  geom_hline(aes(color = "modern", yintercept = mean(win$modern)), linetype = "dashed", color = "blue") +
+  geom_vline(aes(color = "ancient", xintercept = mean(win$ancient)), linetype = "dashed", color = "orange") +
+  scale_x_log10(labels = scales::percent_format(accuracy = 0.01)) +
+  scale_y_log10(labels = scales::percent_format(accuracy = 0.01)) +
+  labs(x = "Neanderthal ancestry proportion\nin ancient Eurasians [%, log scale]",
+       y = "Neanderthal ancestry proportion \ninpresent-day Eurasians [%, log scale]") +
+  coord_fixed(xlim = data_range, ylim = data_range) +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  guides(shape = guide_legend("window", override.aes = list(alpha = 1, size = 3)),
+         linetype = "none") +
+  scale_shape_manual(values = c(4, 20))
+
+p_panels <- cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
+
+ggsave(filename = "desert_comparison.pdf", plot = p_panels, width = 13, height = 7, units = "in")
+
+win %>%
+  filter(desert) %>%
+  summarise(
+    mean(ancient == 0 & modern > 0),
+    mean(ancient > 0 & modern == 0),
+    mean((ancient == 0 & modern == 0) | (ancient > 0 & modern > 0))
+  ) %>%
+  pivot_longer(cols = everything())
+
+win %>% filter(desert) %>% filter(modern == 0) %>% {.$ancient * 100} %>% summary
+
+}
