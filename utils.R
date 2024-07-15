@@ -59,7 +59,7 @@ compute_ancestry <- function(windows_gr, tracts_gr, set) {
   # ... then convert that to proportions
   cov <- lapply(cov, function(x) x / length(unique(set_tracts_gr$ID)))
 
-  chr_coverage <- cov[[unique(seqnames(windows_gr))]]
+  chr_coverage <- cov[[as.character(unique(seqnames(windows_gr)))]]
 
   # count overlaps between windows and tracts
   average_coverage_per_window <- sapply(
