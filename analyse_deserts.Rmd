@@ -1,3 +1,25 @@
+---
+#    self_contained: yes
+output:
+  github_document:
+    html_preview: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "figures/",
+  fig.width = 10,
+  fig.height = 8
+)
+
+set.seed(42)
+
+dir.create("results", showWarnings = FALSE)
+```
+
 ```{r}
 suppressPackageStartupMessages({
   library(readr)
@@ -150,7 +172,7 @@ ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
 ```
 
 ```{r}
-ggplot2::ggsave(paste0("tracts.pdf"), width = 13, height = 7)
+ggplot2::ggsave(paste0("results/tracts.pdf"), width = 13, height = 7)
 ```
 
 ## Testing code for window-based tract analysis on a toy example
@@ -346,7 +368,7 @@ average_coverage_per_window <- function(windows_gr, cov) {
 mcols(windows_gr)$coverage <- average_coverage_per_window(windows_gr, as.numeric(cov))
 mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
 
-pdf(paste0("windows_", set, ".pdf"), 10, 7)
+pdf(paste0("results/windows_", set, ".pdf"), 10, 7)
 
 desert_df <- subset(desert_coords, chrom == as.character(seqnames(windows_gr))[1])
 
@@ -357,7 +379,7 @@ abline(v = desert_df[c("start", "end")], col = "red")
 
 dev.off()
 
-pdf(paste0("desert_windows_", set, ".pdf"), 10, 7)
+pdf(paste0("results/desert_windows_", set, ".pdf"), 10, 7)
 
 windows_gr %>%
   # filter(start >= 100000000 & end <= 130000000) %>% {
@@ -368,13 +390,6 @@ abline(v = desert_df[c("start", "end")], col = "red")
 }
 
 dev.off()
-
-
-
-saveRDS(windows_gr, paste0("windows_", set, ".rds"))
-
-
-unlink("Rplots.pdf")
 ```
 
 Convert the IBDmix tracts data frame to `GRanges`:
@@ -478,7 +493,7 @@ cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
 ```
 
 ```{r}
-ggsave(filename = "desert_comparison.pdf", width = 13, height = 7, units = "in")
+ggsave(filename = "results/desert_comparison.pdf", width = 13, height = 7, units = "in")
 ```
 
 ```{r}
