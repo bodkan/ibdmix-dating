@@ -383,7 +383,7 @@ ancestry_ancient_gr <- compute_ancestry(windows_gr, tracts_gr, "Ancient")
 ```
 
 ```{r}
-desert <- subset(desert_coords, chrom == unique(chrom[1]))
+desert <- desert_coords[desert_coords$chrom == chrom, ]
 
 ancestry_gr <- rbind(
   dplyr::as_tibble(ancestry_modern_gr) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap),
