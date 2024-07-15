@@ -259,31 +259,6 @@ plot(windows_gr$midpoint, windows_gr$coverage,
 
 ## Analysis of tracts inferred in real data
 
-Convert the IBDmix tracts data frame to `GRanges`:
-
-```{r}
-library(BSgenome.Hsapiens.UCSC.hg19)
-
-tracts_gr <- tracts %>%
-  filter(set == "Modern") %>%
-  makeGRangesFromDataFrame(keep.extra.columns = TRUE)
-
-seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
-genome(tracts_gr) <- "hg19"
-
-tracts_gr
-```
-
-Compute coverage per window (i.e. proportion of Neanderthal ancestry per window):
-
-```{r}
-# first compute coverage...
-cov <- coverage(filter(tracts_gr, set == "Modern"))
-# ... then convert that to proportions
-cov <- lapply(cov, function(x) x / length(unique(tracts$ID)))
-```
-
-
 ### Fetch gaps from USCS
 
 ```{r}
@@ -315,10 +290,6 @@ gaps_gr %>%
 ```
 
 ### Generate sliding windows along the chromosome
-
-```{r}
-chrom <- "chr7"
-```
 
 ```{r}
 chrom_length <- seqlengths(tracts_gr)[chrom]
@@ -406,39 +377,51 @@ saveRDS(windows_gr, paste0("windows_", set, ".rds"))
 unlink("Rplots.pdf")
 ```
 
+Convert the IBDmix tracts data frame to `GRanges`:
+
 ```{r}
-windows_gr <- generate_windows(tracts_gr, gaps_gr, chrom = "chr7", window_size = 200e3, step_size = 50e3)
-windows_gr <- compute_ancestry(windows_gr, cov)
+library(BSgenome.Hsapiens.UCSC.hg19)
+
+tracts_gr <- tracts %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
+genome(tracts_gr) <- "hg19"
+
+tracts_gr
 ```
 
+```{r}
+chrom <- "chr7"
+```
 
-# modern vs ancient windows -------------------------------------------------------------------
+```{r}
+windows_gr <- generate_windows(tracts_gr, gaps_gr, chrom = "chr7", window_size = 200e3, step_size = 50e3)
 
-if (file.exists("windows_Ancient.rds") && file.exists("windows_Modern.rds")) {
+ancestry_modern_gr <- compute_ancestry(windows_gr, tracts_gr, "Modern")
+ancestry_ancient_gr <- compute_ancestry(windows_gr, tracts_gr, "Ancient")
+```
 
-win_ancient <- readRDS("windows_Ancient.rds")
-win_ancient$set <- "ancient"
-win_modern <- readRDS("windows_Modern.rds")
-win_modern$set <- "modern"
+```{r}
+desert <- subset(desert_coords, chrom == unique(chrom[1]))
 
-win <- rbind(
-  dplyr::as_tibble(win_ancient) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap),
-  dplyr::as_tibble(win_modern) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap)
+ancestry_gr <- rbind(
+  dplyr::as_tibble(ancestry_modern_gr) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap),
+  dplyr::as_tibble(ancestry_ancient_gr) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap)
 ) %>%
   pivot_wider(names_from = "set", values_from = "coverage") %>%
   # mutate(desert = start >= 106300000 & end <= 124700000)
-  mutate(desert = start >= desert_coords[1] & end <= desert_coords[2])
+  mutate(within_desert = start >= desert$start & end <= desert$end)
 
-p1 <- win %>%
-  filter(start >= desert_coords[1] * 0.9 & end <= desert_coords[2] * 1.1) %>%
+p1 <- ancestry_gr %>%
+  filter(start >= (desert$start * 0.9) & end <= (desert$end * 1.1)) %>%
   {
     ggplot(data = .) +
     geom_line(aes(midpoint, ancient), color = "orange") +
     geom_point(data = filter(., ancient > 0), aes(midpoint, ancient, color = "ancient individuals"), size = 0.8) +
     geom_line(aes(midpoint, modern), color = "blue") +
     geom_point(data = filter(., modern > 0), aes(midpoint, modern, color = "present-day individuals"), size = 0.8) +
-    geom_vline(data = data.frame(coord = desert_coords), aes(xintercept = coord, linetype = "desert boundary"),
-               color = "red") +
+    geom_vline(data = desert, aes(xintercept = start, linetype = "desert boundary"), color = "red") +
+    geom_vline(data = desert, aes(xintercept = end, linetype = "desert boundary"), color = "red") +
     scale_color_manual(values = c("orange", "blue")) +
     guides(color = guide_legend("", override.aes = list(size = 5)),
            linetype = guide_legend("")) +
@@ -447,13 +430,18 @@ p1 <- win %>%
     scale_linetype_manual(values = "dashed") +
     theme_minimal() +
     theme(legend.position = "bottom") +
-    ggtitle(paste("Archaic ancestry desert on chromosome", gsub("chr", "", win$chrom[1])))
+    ggtitle(paste("Archaic ancestry desert on chromosome", gsub("chr", "", .$chrom[1])))
   }; p1
+```
 
-mean(win$modern)
-mean(win$ancient)
+```{r}
+mean(ancestry_gr$modern)
+mean(ancestry_gr$ancient)
+```
 
-win %>% filter(desert) %>% { cor(.$ancient, .$modern) }
+```{r}
+ancestry_gr %>% filter(within_desert) %>% { cor(.$ancient, .$modern) }
+```
 
 # desert_win <- win %>% filter(desert)
 # res <- lm(modern ~ ancient, data = desert_win)
@@ -461,17 +449,18 @@ win %>% filter(desert) %>% { cor(.$ancient, .$modern) }
 # abline(a = 0, b = 1)
 # abline(res, col = "red")
 
-data_range <- c(win$ancient, win$modern) %>% .[. > 0] %>% range
+```{r}
+data_range <- c(ancestry_gr$ancient, ancestry_gr$modern) %>% .[. > 0] %>% range
 
 p2 <- ggplot() +
-  geom_smooth(data = filter(win, desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert),
+  geom_smooth(data = filter(ancestry_gr, within_desert, ancient > 0, modern > 0), aes(ancient, modern, color = within_desert),
               color = "red", fill = "black", method = "lm", linetype = "dashed", linewidth = 0.8, alpha = 0.35) +
-  geom_point(data = filter(win, !desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert, shape = "outside desert"),
+  geom_point(data = filter(ancestry_gr, !within_desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert, shape = "outside desert"),
              color = "lightgray", alpha = 0.5) +
-  geom_point(data = filter(win, desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert, shape = "within desert"), color = "black") +
+  geom_point(data = filter(ancestry_gr, within_desert, ancient > 0, modern > 0), aes(ancient, modern, color = within_desert, shape = "within desert"), color = "black") +
   geom_abline(slope = 1, linetype = "dashed") +
-  geom_hline(aes(color = "modern", yintercept = mean(win$modern)), linetype = "dashed", color = "blue") +
-  geom_vline(aes(color = "ancient", xintercept = mean(win$ancient)), linetype = "dashed", color = "orange") +
+  geom_hline(aes(color = "modern", yintercept = mean(ancestry_gr$modern)), linetype = "dashed", color = "blue") +
+  geom_vline(aes(color = "ancient", xintercept = mean(ancestry_gr$ancient)), linetype = "dashed", color = "orange") +
   scale_x_log10(labels = scales::percent_format(accuracy = 0.01)) +
   scale_y_log10(labels = scales::percent_format(accuracy = 0.01)) +
   labs(x = "Neanderthal ancestry proportion\nin ancient Eurasians [%, log scale]",
@@ -482,13 +471,19 @@ p2 <- ggplot() +
   guides(shape = guide_legend("window", override.aes = list(alpha = 1, size = 3)),
          linetype = "none") +
   scale_shape_manual(values = c(4, 20))
+```
 
-p_panels <- cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
+```{r}
+cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
+```
 
-ggsave(filename = "desert_comparison.pdf", plot = p_panels, width = 13, height = 7, units = "in")
+```{r}
+ggsave(filename = "desert_comparison.pdf", width = 13, height = 7, units = "in")
+```
 
-win %>%
-  filter(desert) %>%
+```{r}
+ancestry_gr %>%
+  filter(within_desert) %>%
   summarise(
     mean(ancient == 0 & modern > 0),
     mean(ancient > 0 & modern == 0),
@@ -496,6 +491,5 @@ win %>%
   ) %>%
   pivot_longer(cols = everything())
 
-win %>% filter(desert) %>% filter(modern == 0) %>% {.$ancient * 100} %>% summary
-
-}
+ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 100 } %>% summary
+```

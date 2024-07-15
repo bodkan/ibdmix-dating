@@ -51,7 +51,14 @@ generate_windows <- function(tracts_gr, gaps_gr, chrom, window_size, step_size) 
   windows_gr
 }
 
-compute_ancestry <- function(windows_gr, cov) {
+compute_ancestry <- function(windows_gr, tracts_gr, set) {
+  set_tracts_gr <- filter(tracts_gr, set == !!set)
+
+  # first compute coverage...
+  cov <- coverage(set_tracts_gr)
+  # ... then convert that to proportions
+  cov <- lapply(cov, function(x) x / length(unique(set_tracts_gr$ID)))
+
   chr_coverage <- cov[[unique(seqnames(windows_gr))]]
 
   # count overlaps between windows and tracts
@@ -65,6 +72,7 @@ compute_ancestry <- function(windows_gr, cov) {
 
   mcols(windows_gr)$coverage <- average_coverage_per_window
   mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
+  mcols(windows_gr)$set <- tolower(set)
 
   windows_gr
 }
