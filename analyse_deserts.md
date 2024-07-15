@@ -671,14 +671,14 @@ p1 <- ancestry_gr %>%
 
 ``` r
 mean(ancestry_gr$modern)
-#> [1] 0.01398875
+#> [1] 0.02156763
 mean(ancestry_gr$ancient)
-#> [1] 0.01428588
+#> [1] 0.02172014
 ```
 
 ``` r
 ancestry_gr %>% filter(within_desert) %>% { cor(.$ancient, .$modern) }
-#> [1] 0.9730307
+#> [1] 0.9980341
 ```
 
 # desert_win \<- win %\>% filter(desert)
@@ -738,11 +738,11 @@ ancestry_gr %>%
 #> # A tibble: 3 × 2
 #>   name                                                             value
 #>   <chr>                                                            <dbl>
-#> 1 mean(ancient == 0 & modern > 0)                                 0.0321
-#> 2 mean(ancient > 0 & modern == 0)                                 0.0214
-#> 3 mean((ancient == 0 & modern == 0) | (ancient > 0 & modern > 0)) 0.947
+#> 1 mean(ancient == 0 & modern > 0)                                 0     
+#> 2 mean(ancient > 0 & modern == 0)                                 0.0588
+#> 3 mean((ancient == 0 & modern == 0) | (ancient > 0 & modern > 0)) 0.941
 
 ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 100 } %>% summary
-#>      Min.   1st Qu.    Median      Mean   3rd Qu.      Max. 
-#> 0.0000000 0.0000000 0.0000000 0.0006131 0.0000000 0.0290528
+#>     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+#> 0.000000 0.000000 0.000000 0.005812 0.000000 0.168188
 ```
