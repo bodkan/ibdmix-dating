@@ -557,163 +557,50 @@ gaps_gr %>%
 
 ``` r
 chrom <- "chr7"
-```
 
-``` r
-chrom_length <- seqlengths(tracts_gr)[chrom]
 window_size <- 200e3
 step_size <- 50e3
-
-windows <- slidingWindows(IRanges(start = 1, end = chrom_length), width = window_size, step = step_size)
-windows_gr <- GRanges(seqnames = chrom, ranges = unlist(windows))
-windows_gr$id <- factor(seq_len(length(windows_gr)))
-seqlengths(windows_gr) <- seqlengths(tracts_gr)[chrom]
-genome(windows_gr) <- genome(tracts_gr)
-windows_gr
-#> GRanges object with 3180 ranges and 1 metadata column:
-#>          seqnames              ranges strand |       id
-#>             <Rle>           <IRanges>  <Rle> | <factor>
-#>      [1]     chr7            1-200000      * |        1
-#>      [2]     chr7        50001-250000      * |        2
-#>      [3]     chr7       100001-300000      * |        3
-#>      [4]     chr7       150001-350000      * |        4
-#>      [5]     chr7       200001-400000      * |        5
-#>      ...      ...                 ...    ... .      ...
-#>   [3176]     chr7 158750001-158950000      * |     3176
-#>   [3177]     chr7 158800001-159000000      * |     3177
-#>   [3178]     chr7 158850001-159050000      * |     3178
-#>   [3179]     chr7 158900001-159100000      * |     3179
-#>   [3180]     chr7 158950001-159138663      * |     3180
-#>   -------
-#>   seqinfo: 1 sequence from hg19 genome
 ```
-
-Mark windows hitting gaps to be removed:
-
-``` r
-to_remove <- queryHits(findOverlaps(windows_gr, gaps_gr))
-windows_gr$gap <- FALSE
-windows_gr[to_remove]$gap <- TRUE
-```
-
-As sanity check, plot all windows along the chromosome:
-
-``` r
-plot(NA, xlim = c(1, seqlengths(windows_gr)), ylim = c(1, length(windows_gr)), ylab = "sliding window number")
-segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id),
-         col = windows_gr$gap + 1)
-```
-
-![](figures/unnamed-chunk-30-1.png)<!-- -->
-
-Plot only the first and last 2 Mb of windows on both ends of the
-chromosome:
-
-``` r
-plotting_cutoff <- 2e6
-
-plot(NA, xlim = c(1, plotting_cutoff), ylim = c(1, length(windows_gr[start(windows_gr) < plotting_cutoff])), ylab = "sliding window number")
-segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id),
-         col = windows_gr$gap + 1)
-```
-
-![](figures/unnamed-chunk-31-1.png)<!-- -->
-
-``` r
-
-plot(NA, xlim = c(seqlengths(windows_gr) - plotting_cutoff, seqlengths(windows_gr)), ylim = c(length(windows_gr) - length(windows_gr[start(windows_gr) < plotting_cutoff]), length(windows_gr)), ylab = "sliding window number")
-segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id),
-         col = windows_gr$gap + 1)
-```
-
-![](figures/unnamed-chunk-31-2.png)<!-- -->
 
 ### Analyse tracts in windows
 
 ``` r
 windows_gr <- generate_windows(tracts_gr, gaps_gr, chrom = "chr7", window_size = 200e3, step_size = 50e3)
 
-ancestry_modern_gr <- compute_ancestry(windows_gr, tracts_gr, "Modern")
-ancestry_ancient_gr <- compute_ancestry(windows_gr, tracts_gr, "Ancient")
+ancestry_modern_gr <- filter(tracts_gr, set == "Modern") %>% compute_ancestry(windows_gr)
+ancestry_ancient_gr <- filter(tracts_gr, set == "Ancient") %>% compute_ancestry(windows_gr)
+
+ancestry_gr <- granges(windows_gr)
+mcols(ancestry_gr) <- cbind(
+  mcols(windows_gr),
+  mcols(ancestry_ancient_gr)["coverage"] %>% setNames("ancient"),
+  mcols(ancestry_modern_gr)["coverage"] %>% setNames("modern") 
+)
+mcols(ancestry_gr)$within_desert <-
+  start(ancestry_gr) >= start(filter(deserts_gr, seqnames == chrom)) &
+  end(ancestry_gr) <= end(filter(deserts_gr, seqnames == chrom))
 ```
 
 ``` r
-desert <- desert_coords[desert_coords$chrom == chrom, ]
-
-ancestry_gr <- rbind(
-  dplyr::as_tibble(ancestry_modern_gr) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap),
-  dplyr::as_tibble(ancestry_ancient_gr) %>% select(chrom = seqnames, start, end, midpoint, coverage, set, gap)
-) %>%
-  pivot_wider(names_from = "set", values_from = "coverage") %>%
-  mutate(within_desert = start >= desert$start & end <= desert$end)
-
-p1 <- ancestry_gr %>%
-  filter(start >= (desert$start * 0.9) & end <= (desert$end * 1.1)) %>%
-  {
-    ggplot(data = .) +
-    geom_rect(data = desert, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
-    geom_line(aes(midpoint, ancient), color = "orange") +
-    geom_point(data = filter(., ancient > 0), aes(midpoint, ancient, color = "ancient individuals"), size = 0.8) +
-    geom_line(aes(midpoint, modern), color = "blue") +
-    geom_point(data = filter(., modern > 0), aes(midpoint, modern, color = "present-day individuals"), size = 0.8) +
-    geom_vline(data = desert, aes(xintercept = start, linetype = "desert boundary"), color = "red") +
-    geom_vline(data = desert, aes(xintercept = end, linetype = "desert boundary"), color = "red") +
-    scale_color_manual(values = c("orange", "blue")) +
-    guides(color = guide_legend("", override.aes = list(size = 5)),
-           linetype = guide_legend("")) +
-    labs(x = "genomic coordinate [bp]", y = "proportion of Neanderthal ancestry") +
-    scale_x_continuous(labels = scales::comma) +
-    scale_linetype_manual(values = "dashed") +
-    theme_minimal() +
-    theme(legend.position = "bottom") +
-    ggtitle(paste("Archaic ancestry desert on chromosome", gsub("chr", "", .$chrom[1])))
-  }
+p1 <- plot_ancestry(ancestry_gr, deserts_gr)
 ```
 
 ``` r
-mean(ancestry_gr$modern)
-#> [1] 0.02156763
-mean(ancestry_gr$ancient)
-#> [1] 0.02172014
+mean(filter(ancestry_gr, within_desert)$ancient)
+#> [1] 0.0004358431
+mean(filter(ancestry_gr, within_desert)$modern)
+#> [1] 0.000297037
 ```
 
 ``` r
-ancestry_gr %>% filter(within_desert) %>% { cor(.$ancient, .$modern) }
-#> [1] 0.9454776
+mean(filter(ancestry_gr, !within_desert)$ancient)
+#> [1] 0.02306509
+mean(filter(ancestry_gr, !within_desert)$modern)
+#> [1] 0.02291171
 ```
 
-# desert_win \<- win %\>% filter(desert)
-
-# res \<- lm(modern ~ ancient, data = desert_win)
-
-# plot(desert_win$ancient, desert_win$modern, xlim = c(0, 0.01), ylim = c(0, 0.01))
-
-# abline(a = 0, b = 1)
-
-# abline(res, col = “red”)
-
 ``` r
-data_range <- c(ancestry_gr$ancient, ancestry_gr$modern) %>% .[. > 0] %>% range
-
-p2 <- ggplot() +
-  geom_smooth(data = filter(ancestry_gr, within_desert, ancient > 0, modern > 0), aes(ancient, modern, color = within_desert),
-              color = "red", fill = "black", method = "lm", linetype = "dashed", linewidth = 0.8, alpha = 0.35) +
-  geom_point(data = filter(ancestry_gr, !within_desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert, shape = "outside desert"),
-             color = "lightgray", alpha = 0.5) +
-  geom_point(data = filter(ancestry_gr, within_desert, ancient > 0, modern > 0), aes(ancient, modern, color = within_desert, shape = "within desert"), color = "black") +
-  geom_abline(slope = 1, linetype = "dashed") +
-  geom_hline(aes(color = "modern", yintercept = mean(ancestry_gr$modern)), linetype = "dashed", color = "blue") +
-  geom_vline(aes(color = "ancient", xintercept = mean(ancestry_gr$ancient)), linetype = "dashed", color = "orange") +
-  scale_x_log10(labels = scales::percent_format(accuracy = 0.01)) +
-  scale_y_log10(labels = scales::percent_format(accuracy = 0.01)) +
-  labs(x = "Neanderthal ancestry proportion\nin ancient Eurasians [%, log scale]",
-       y = "Neanderthal ancestry proportion \ninpresent-day Eurasians [%, log scale]") +
-  coord_fixed(xlim = data_range, ylim = data_range) +
-  theme_minimal() +
-  theme(legend.position = "bottom") +
-  guides(shape = guide_legend("window", override.aes = list(alpha = 1, size = 3)),
-         linetype = "none") +
-  scale_shape_manual(values = c(4, 20))
+p2 <- plot_correlation(ancestry_gr)
 ```
 
 ``` r
@@ -721,7 +608,7 @@ cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
 #> `geom_smooth()` using formula = 'y ~ x'
 ```
 
-![](figures/unnamed-chunk-37-1.png)<!-- -->
+![](figures/unnamed-chunk-33-1.png)<!-- -->
 
 ``` r
 ggsave(filename = "results/desert_comparison.pdf", width = 13, height = 7, units = "in")
@@ -729,21 +616,24 @@ ggsave(filename = "results/desert_comparison.pdf", width = 13, height = 7, units
 
 ``` r
 ancestry_gr %>%
+  as_tibble() %>%
   filter(within_desert) %>%
   summarise(
     mean(ancient == 0 & modern > 0),
     mean(ancient > 0 & modern == 0),
     mean((ancient == 0 & modern == 0) | (ancient > 0 & modern > 0))
   ) %>%
-  pivot_longer(cols = everything())
+  pivot_longer(cols = everything(), values_to = "proportion of sites")
 #> # A tibble: 3 × 2
-#>   name                                                             value
-#>   <chr>                                                            <dbl>
-#> 1 mean(ancient == 0 & modern > 0)                                 0     
-#> 2 mean(ancient > 0 & modern == 0)                                 0.0265
-#> 3 mean((ancient == 0 & modern == 0) | (ancient > 0 & modern > 0)) 0.974
+#>   name                                                     `proportion of sites`
+#>   <chr>                                                                    <dbl>
+#> 1 mean(ancient == 0 & modern > 0)                                         0     
+#> 2 mean(ancient > 0 & modern == 0)                                         0.0265
+#> 3 mean((ancient == 0 & modern == 0) | (ancient > 0 & mode…                0.974
+```
 
-ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 100 } %>% summary
+``` r
+ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 100 } %>% summary()
 #>     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
 #> 0.000000 0.000000 0.000000 0.004347 0.000000 0.178234
 ```
