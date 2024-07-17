@@ -651,6 +651,7 @@ p1 <- ancestry_gr %>%
   filter(start >= (desert$start * 0.9) & end <= (desert$end * 1.1)) %>%
   {
     ggplot(data = .) +
+    geom_rect(data = desert, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
     geom_line(aes(midpoint, ancient), color = "orange") +
     geom_point(data = filter(., ancient > 0), aes(midpoint, ancient, color = "ancient individuals"), size = 0.8) +
     geom_line(aes(midpoint, modern), color = "blue") +
