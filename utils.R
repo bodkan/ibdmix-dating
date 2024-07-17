@@ -34,26 +34,33 @@ read_tracts <- function(set, metadata) {
   tracts
 }
 
-generate_windows <- function(tracts_gr, gaps_gr, chrom, window_size, step_size) {
-  tracts_gr <- tracts_gr %>% filter(seqnames == chrom)
-  chrom_length <- seqlengths(tracts_gr)[chrom]
+generate_windows <- function(gaps_gr, window_size, step_size) {
+  autosomes_gr <- GenomeInfoDb::getChromInfoFromUCSC("hg19") %>%
+    filter(grepl("chr\\d+$", chrom)) %>%
+    mutate(start = 1) %>%
+    dplyr::rename(end = size) %>%
+    makeGRangesFromDataFrame()
+  seqinfo(autosomes_gr) <- seqinfo(tracts_gr)
 
-  windows <- slidingWindows(IRanges(start = 1, end = chrom_length), width = window_size, step = step_size)
-  windows_gr <- GRanges(seqnames = chrom, ranges = unlist(windows))
-  windows_gr$id <- factor(seq_len(length(windows_gr)))
-  seqlengths(windows_gr) <- seqlengths(tracts_gr)[chrom]
-  genome(windows_gr) <- genome(tracts_gr)
+  windows_grl <- slidingWindows(autosomes_gr, width = window_size, step = step_size)
+  for (i in seq_along(windows_grl)) {
+    windows_grl[[i]]$midpoint <- (start(windows_grl[[i]]) + end(windows_grl[[i]])) / 2
+    windows_grl[[i]]$gap <- FALSE
+    to_remove <- queryHits(findOverlaps(windows_grl[[i]], gaps_gr))
+    if (length(to_remove) > 0)
+      windows_grl[[i]][to_remove]$gap <- TRUE
+  }
 
-  to_remove <- queryHits(findOverlaps(windows_gr, gaps_gr))
-  windows_gr$gap <- FALSE
-  windows_gr[to_remove]$gap <- TRUE
-
-  mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
-
-  windows_gr
+  unlist(windows_grl)
 }
 
 compute_ancestry <- function(tracts_gr, windows_gr) {
+  autosomes <- getChromInfoFromUCSC("hg19") %>%
+    filter(grepl("chr\\d+$", chrom)) %>%
+    mutate(start = 1) %>%
+    dplyr::rename(end = size) %>%
+    makeGRangesFromDataFrame()
+
   # first compute coverage...
   cov <- coverage(tracts_gr)
   # ... then convert that to proportions
@@ -81,7 +88,7 @@ plot_ancestry <- function(ancestry_gr, deserts_gr) {
   desert_df <- deserts_gr %>% filter(seqnames == chrom) %>% as_tibble
 
   ancestry_df <- as_tibble(ancestry_gr) %>%
-    select(chrom = seqnames, start, end, id, ancient, modern, gap, midpoint)
+    select(chrom = seqnames, start, end, ancient, modern, gap, midpoint)
 
   ancestry_df %>%
     filter(start >= (desert_df$start * 0.9) & end <= (desert_df$end * 1.1)) %>%

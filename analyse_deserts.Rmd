@@ -307,36 +307,27 @@ query <- ucscTableQuery(mySession, table = "gap")
 
 # gap table columns: https://genome.ucsc.edu/cgi-bin/hgTables?db=hg38&hgta_group=map&hgta_track=gap&hgta_table=gap&hgta_doSchema=describe+table+schema
 gaps <- getTable(query) %>%
-  dplyr::filter(grepl("chr\\d+$", chrom)) %>% as_tibble() %>%
-  filter(chrom %in% as.character(seqnames(deserts_gr)))
+  dplyr::filter(grepl("chr\\d+$", chrom)) %>% as_tibble()
 
 gaps_gr <- makeGRangesFromDataFrame(gaps, starts.in.df.are.0based = TRUE, keep.extra.columns = TRUE, ignore.strand = TRUE)
-seqlengths(gaps_gr) <- seqlengths(tracts_gr)[as.character(seqnames(deserts_gr))]
-genome(gaps_gr) <- genome(tracts_gr)
+seqinfo(gaps_gr) <- seqinfo(tracts_gr)
 
 gaps_gr
 ```
 
 ```{r}
 gaps_gr %>%
+  filter(seqnames %in% seqnames(deserts_gr)) %>%
   autoplot(aes(fill = type), color = NA) +
   theme_bw() +
   theme(panel.grid = element_blank(), legend.position = "bottom")
 ```
 
-### Generate sliding windows along the chromosome
-
-```{r}
-chrom <- "chr7"
-
-window_size <- 200e3
-step_size <- 50e3
-```
-
 ### Analyse tracts in windows
 
 ```{r}
-windows_gr <- generate_windows(tracts_gr, gaps_gr, chrom = "chr7", window_size = 200e3, step_size = 50e3)
+windows_gr <- generate_windows(gaps_gr, window_size = 200e3, step_size = 50e3)
+windows_gr <- filter(windows_gr, seqnames == "chr7")
 
 ancestry_modern_gr <- filter(tracts_gr, set == "Modern") %>% compute_ancestry(windows_gr)
 ancestry_ancient_gr <- filter(tracts_gr, set == "Ancient") %>% compute_ancestry(windows_gr)
