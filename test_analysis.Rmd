@@ -1,0 +1,126 @@
+---
+#    self_contained: yes
+output:
+  github_document:
+  html_preview: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "figures/",
+  fig.width = 10,
+  fig.height = 8
+)
+
+set.seed(42)
+```
+
+```{r}
+suppressPackageStartupMessages({
+  library(readr)
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+
+  library(GenomicRanges)
+  library(ggbio)
+})
+
+source(here::here("utils.R"))
+```
+
+
+## Testing code for window-based tract analysis on a toy example
+
+### Generate testing tracts in a few individuals
+
+```{r}
+tracts_gr <- GRanges(
+  seqnames = "chr7",
+  ranges = IRanges(c(2, 4, 12, 4, 12, 5), c(6, 6, 17, 7, 15, 7)),
+  ID = c("ind1", "ind2", "ind1", "ind3", "ind3", "ind4")
+)
+seqlengths(tracts_gr) <- 20
+
+tracts_gr
+```
+
+```{r}
+ggplot(tracts_gr) +
+  geom_rect(aes(group = ID, fill = ID)) +
+  scale_x_continuous(breaks = seq_len(seqlengths(tracts_gr))) +
+  coord_cartesian(xlim = c(1, seqlengths(tracts_gr))) +
+  theme_minimal() +
+  theme(panel.grid = element_blank())
+```
+
+```{r, fig.height=13, fig.width=10}
+par(mfrow = c(4, 1))
+
+plot(NA, xlim = c(1, seqlengths(tracts_gr)), ylim = c(1, length(unique(tracts_gr$ID))), ylab = "individual")
+segments(x0 = start(tracts_gr), x1 = end(tracts_gr), y0 = as.numeric(factor(tracts_gr$ID)), y1 = as.numeric(factor(tracts_gr$ID)), col = factor(tracts_gr$ID))
+
+# Compute coverage of Neanderthal tracts per site (i.e. proportion of Neanderthal ancestry per site):
+
+cov <- coverage(tracts_gr)
+cov <- cov[[1]]
+cov <- cov / length(unique(tracts_gr$ID))
+
+plot(seq_along(cov), cov, type = "o",
+     xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1),
+     ylab = "coverage per site")
+
+# prop_cov <- cov / length(unique(tracts_gr$ID))
+# prop_cov
+# plot(prop_cov[[1]], type = "o", xlim = c(1, seqlengths(tracts_gr)))
+
+# runcov <- runmean(cov, 5)
+# runcov
+# plot(seq_along(runcov), runcov, type = "o", xlim = c(0, seqlengths(tracts_gr)), ylab = "runmean() coverage")
+
+# Generate sliding windows
+
+chrom_length <- seqlengths(tracts_gr)
+window_size <- 5
+step_size <- 3
+
+windows <- slidingWindows(IRanges(start = 1, end = chrom_length), width = window_size, step = step_size)
+windows_gr <- GRanges(seqnames = "chr7", ranges = unlist(windows))
+windows_gr$id <- factor(seq_len(length(windows_gr)))
+seqlengths(windows_gr) <- seqlengths(tracts_gr)
+windows_gr
+
+# sanity check by plotting overlapping windows sequentially as tiles
+# autoplot(windows_gr, aes(group = id), color = NA) + xlim(1, seqlengths(windows_gr))
+
+# generate testing "mapping gaps", "centromeres", etc.
+
+gaps_gr <- GRanges(seqnames = "chr7", ranges = IRanges(start = 8, end = 11))
+
+to_remove <- queryHits(findOverlaps(windows_gr, gaps_gr))
+windows_gr$gap <- FALSE
+windows_gr[to_remove]$gap <- TRUE
+
+plot(NA, xlim = c(1, seqlengths(windows_gr)), ylim = c(1, length(windows_gr)), ylab = "sliding window number")
+segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id),
+         col = windows_gr$gap + 1)
+
+# compute windows-based coverage (i.e. proportion of Neanderthal ancestry per window)
+
+average_coverage_per_window <- function(windows_gr, cov) {
+  sapply(seq_along(windows_gr), function(i) {
+    start_idx <- start(windows_gr[i])
+    end_idx <- end(windows_gr[i])
+    mean(cov[start_idx:end_idx])
+  })
+}
+mcols(windows_gr)$coverage <- average_coverage_per_window(windows_gr, as.numeric(cov))
+mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
+
+plot(windows_gr$midpoint, windows_gr$coverage,
+     ylab = "mean coverage in sliding window", type = "o", xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1))
+```
+
