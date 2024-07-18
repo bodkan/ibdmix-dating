@@ -66,20 +66,28 @@ compute_ancestry <- function(tracts_gr, windows_gr) {
   # ... then convert that to proportions
   cov <- lapply(cov, function(x) x / length(unique(tracts_gr$ID)))
 
-  chr_coverage <- cov[[as.character(unique(seqnames(windows_gr)))]]
+  ancestry_list <- mclapply(as.character(unique(seqnames(windows_gr))),
+                            function(chrom) {
+    chrom_coverage <- cov[[chrom]]
+    chrom_gr <- windows_gr[seqnames(windows_gr) == chrom]
 
-  # count overlaps between windows and tracts
-  average_coverage_per_window <- sapply(
-    seq_along(windows_gr),
-    function(i) {
-      start_idx <- start(windows_gr[i])
-      end_idx <- end(windows_gr[i])
-      mean(chr_coverage[start_idx:end_idx])
-  })
+    # count overlaps between windows and tracts
+    average_coverage_per_window <- sapply(
+      seq_along(chrom_gr),
+      function(i) {
+        start_idx <- start(chrom_gr[i])
+        end_idx <- end(chrom_gr[i])
+        mean(chrom_coverage[start_idx:end_idx])
+    })
 
-  mcols(windows_gr)$coverage <- average_coverage_per_window
+    mcols(chrom_gr)$coverage <- average_coverage_per_window
 
-  windows_gr
+    chrom_gr
+  }, mc.cores = detectCores())
+
+  ancestry_grl <- GRangesList(ancestry_list)
+
+  unlist(ancestry_grl)
 }
 
 plot_ancestry <- function(ancestry_gr, deserts_gr) {
