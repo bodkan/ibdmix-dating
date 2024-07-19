@@ -10,7 +10,7 @@ knitr::opts_chunk$set(
   echo = TRUE,
   collapse = TRUE,
   comment = "#>",
-  fig.path = "figures/",
+  # fig.path = "figures/",
   fig.width = 10,
   fig.height = 8
 )
@@ -46,15 +46,6 @@ tracts_gr <- GRanges(
 seqlengths(tracts_gr) <- 20
 
 tracts_gr
-```
-
-```{r}
-ggplot(tracts_gr) +
-  geom_rect(aes(group = ID, fill = ID)) +
-  scale_x_continuous(breaks = seq_len(seqlengths(tracts_gr))) +
-  coord_cartesian(xlim = c(1, seqlengths(tracts_gr))) +
-  theme_minimal() +
-  theme(panel.grid = element_blank())
 ```
 
 ```{r, fig.height=13, fig.width=10}

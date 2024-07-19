@@ -53,21 +53,11 @@ tracts_gr
 ```
 
 ``` r
-ggplot(tracts_gr) +
-  geom_rect(aes(group = ID, fill = ID)) +
-  scale_x_continuous(breaks = seq_len(seqlengths(tracts_gr))) +
-  coord_cartesian(xlim = c(1, seqlengths(tracts_gr))) +
-  theme_minimal() +
-  theme(panel.grid = element_blank())
-```
-
-![](figures/unnamed-chunk-3-1.png)<!-- -->
-
-``` r
 par(mfrow = c(4, 1))
 
-plot(NA, xlim = c(1, seqlengths(tracts_gr)), ylim = c(1, length(unique(tracts_gr$ID))), ylab = "individual")
+plot(NA, xlim = c(1, seqlengths(tracts_gr)), ylim = c(1, length(unique(tracts_gr$ID))), ylab = "individual", yaxt = "n")
 segments(x0 = start(tracts_gr), x1 = end(tracts_gr), y0 = as.numeric(factor(tracts_gr$ID)), y1 = as.numeric(factor(tracts_gr$ID)), col = factor(tracts_gr$ID))
+axis(2, at = 1:length(unique(tracts_gr$ID)), labels = factor(unique(tracts_gr$ID)))
 
 # Compute coverage of Neanderthal tracts per site (i.e. proportion of Neanderthal ancestry per site):
 
@@ -141,4 +131,4 @@ plot(windows_gr$midpoint, windows_gr$coverage,
      ylab = "mean coverage in sliding window", type = "o", xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1))
 ```
 
-![](figures/unnamed-chunk-4-1.png)<!-- -->
+![](test_analysis_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
