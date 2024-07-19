@@ -269,12 +269,16 @@ ggsave(filename = "results/desert_comparison.pdf", width = 13, height = 7, units
 ancestry_gr %>%
   as_tibble() %>%
   filter(within_desert) %>%
+  dplyr::rename(chrom = seqnames) %>%
+  mutate(chrom = as.character(chrom)) %>%
+  group_by(chrom) %>% 
   summarise(
     mean(ancient == 0 & modern > 0),
     mean(ancient > 0 & modern == 0),
     mean((ancient == 0 & modern == 0) | (ancient > 0 & modern > 0))
   ) %>%
-  pivot_longer(cols = everything(), values_to = "proportion of sites")
+  pivot_longer(cols = contains("mean"), values_to = "proportion of sites") %>%
+  split(.$chrom)
 ```
 
 ```{r}
