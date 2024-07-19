@@ -232,15 +232,11 @@ windows_gr[queryHits(findOverlaps(windows_gr, deserts_gr))]$within_desert <- TRU
 ancestry_modern_gr <- filter(tracts_gr, set == "Modern") %>% compute_ancestry(windows_gr)
 ancestry_ancient_gr <- filter(tracts_gr, set == "Ancient") %>% compute_ancestry(windows_gr)
 
-ancestry_gr <- granges(windows_gr)
-mcols(ancestry_gr) <- cbind(
-  mcols(windows_gr),
-  mcols(ancestry_ancient_gr)["coverage"] %>% setNames("ancient"),
-  mcols(ancestry_modern_gr)["coverage"] %>% setNames("modern") 
-)
-mcols(ancestry_gr)$within_desert <-
-  start(ancestry_gr) >= start(filter(deserts_gr, seqnames == chrom)) &
-  end(ancestry_gr) <= end(filter(deserts_gr, seqnames == chrom))
+ancestry_gr <- windows_gr
+ancestry_gr$modern <- ancestry_modern_gr$coverage
+ancestry_gr$ancient <- ancestry_ancient_gr$coverage
+
+ancestry_gr
 ```
 
 ```{r}
