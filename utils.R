@@ -2,11 +2,9 @@ library(readr)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
-library(sf)
-library(rnaturalearth)
+library(parallel)
 
 library(GenomicRanges)
-library(ggbio)
 library(plyranges)
 
 read_metadata <- function() {
