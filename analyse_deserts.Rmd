@@ -240,29 +240,13 @@ ancestry_gr
 ```
 
 ```{r}
-p1 <- plot_ancestry(ancestry_gr, deserts_gr)
+filter(ancestry_gr, within_desert) %>% as_tibble() %>%
+  group_by(seqnames) %>%
+  summarise(mean(ancient), mean(modern))
 ```
 
 ```{r}
-mean(filter(ancestry_gr, within_desert)$ancient)
-mean(filter(ancestry_gr, within_desert)$modern)
-```
-
-```{r}
-mean(filter(ancestry_gr, !within_desert)$ancient)
-mean(filter(ancestry_gr, !within_desert)$modern)
-```
-
-```{r}
-p2 <- plot_correlation(ancestry_gr)
-```
-
-```{r}
-cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
-```
-
-```{r}
-ggsave(filename = "results/desert_comparison.pdf", width = 13, height = 7, units = "in")
+ancestry_gr %>% as_tibble() %>% summarise(mean(ancient), mean(modern))
 ```
 
 ```{r}
@@ -284,3 +268,69 @@ ancestry_gr %>%
 ```{r}
 ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 100 } %>% summary()
 ```
+
+```{r}
+pdf("results/desert_comparison.pdf", width = 12, height = 8)
+
+for (chrom in as.character(unique(seqnames(deserts_gr)))) {
+  p1 <- plot_desert_ancestry(ancestry_gr, deserts_gr, chrom)
+  p2 <- plot_desert_correlation(ancestry_gr, chrom)
+  
+  print(cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7)))
+}
+
+dev.off()
+```
+
+```{r}
+p1 <- plot_desert_ancestry(ancestry_gr, deserts_gr, "chr7")
+p2 <- plot_desert_correlation(ancestry_gr, "chr7")
+
+cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
+```
+
+## Comparison of tracts between ancient and present-day humans
+
+```{r}
+tracts_df <- select(metadata, sampleId, ageAverage) %>% inner_join(tracts, by = c("sampleId" = "ID"))
+tracts_df$width <- tracts_df$end - tracts_df$start
+tracts_df$ageAverage <- ifelse(is.na(tracts_df$ageAverage), 0, tracts_df$ageAverage)
+
+tracts_df$age_group <- cut(
+  tracts_df$ageAverage,
+  breaks = c(Inf, 20e3, 10e3, 5e3, 100, 0),
+)
+
+group_levels <- levels(tracts_df$age_group)
+
+tracts_df <- tracts_df %>%
+  mutate(
+    age_group = as.character(age_group),
+    age_group = ifelse(is.na(age_group), "present-day", age_group),
+    age_group = factor(age_group, levels = c("present-day", group_levels))
+  )
+```
+
+```{r}
+group_by(tracts_df, age_group) %>%
+  summarise(mean(width), min(width), max(width))
+```
+
+```{r}
+ggplot(tracts_df) +
+  geom_density(aes(width, color = age_group)) +
+  scale_x_log10()
+```
+
+```{r}
+ggplot(tracts_df) +
+  geom_boxplot(aes(age_group, width, color = age_group))
+```
+
+```{r}
+ggplot(tracts_df) +
+  geom_boxplot(aes(age_group, width, color = age_group)) +
+  coord_cartesian(ylim = c(50e3, 250e3)) 
+```
+
+

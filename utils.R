@@ -88,12 +88,11 @@ compute_ancestry <- function(tracts_gr, windows_gr) {
   unlist(ancestry_grl)
 }
 
-plot_ancestry <- function(ancestry_gr, deserts_gr) {
-  chrom <- as.character(seqnames(ancestry_gr))[1]
-
+plot_desert_ancestry <- function(ancestry_gr, deserts_gr, chrom) {
   desert_df <- deserts_gr %>% filter(seqnames == chrom) %>% as_tibble
 
   ancestry_df <- as_tibble(ancestry_gr) %>%
+    filter(seqnames == chrom) %>%
     select(chrom = seqnames, start, end, ancient, modern, gap, midpoint)
 
   ancestry_df %>%
@@ -112,6 +111,7 @@ plot_ancestry <- function(ancestry_gr, deserts_gr) {
                linetype = guide_legend("")) +
         labs(x = "genomic coordinate [bp]", y = "proportion of Neanderthal ancestry") +
         scale_x_continuous(labels = scales::comma) +
+        coord_cartesian(ylim = c(0, 0.1)) +
         scale_linetype_manual(values = "dashed") +
         theme_minimal() +
         theme(legend.position = "bottom") +
@@ -120,10 +120,8 @@ plot_ancestry <- function(ancestry_gr, deserts_gr) {
 
 }
 
-plot_correlation <- function(ancestry_gr) {
-  data_range <- c(ancestry_gr$ancient, ancestry_gr$modern) %>% .[. > 0] %>% range
-
-  ancestry_df <- as_tibble(ancestry_gr)
+plot_desert_correlation <- function(ancestry_gr, chrom) {
+  ancestry_df <- as_tibble(ancestry_gr) %>% filter(seqnames == chrom)
 
   ggplot() +
     geom_smooth(data = filter(ancestry_df, within_desert, ancient > 0, modern > 0), aes(ancient, modern, color = within_desert),
@@ -134,11 +132,13 @@ plot_correlation <- function(ancestry_gr) {
     geom_abline(slope = 1, linetype = "dashed") +
     geom_hline(aes(color = "modern", yintercept = mean(ancestry_df$modern)), linetype = "dashed", color = "blue") +
     geom_vline(aes(color = "ancient", xintercept = mean(ancestry_df$ancient)), linetype = "dashed", color = "orange") +
-    scale_x_log10(labels = scales::percent_format(accuracy = 0.01)) +
-    scale_y_log10(labels = scales::percent_format(accuracy = 0.01)) +
+    # scale_x_log10(labels = scales::percent_format(accuracy = 0.01), limits = c(0.1, NA)) +
+    # scale_y_log10(labels = scales::percent_format(accuracy = 0.01)) +
+    scale_x_log10(breaks = c(0.0001, mean(ancestry_df$ancient), 1), labels = scales::percent_format(accuracy = 0.01), limits = c(0.00001, 1)) +
+    scale_y_log10(breaks = c(0.0001, mean(ancestry_df$modern), 1), labels = scales::percent_format(accuracy = 0.01), limits = c(0.00001, 1)) +
     labs(x = "Neanderthal ancestry proportion\nin ancient Eurasians [%, log scale]",
-         y = "Neanderthal ancestry proportion \ninpresent-day Eurasians [%, log scale]") +
-    coord_fixed(xlim = data_range, ylim = data_range) +
+         y = "Neanderthal ancestry proportion\nin present-day Eurasians [%, log scale]") +
+    coord_fixed() +
     theme_minimal() +
     theme(legend.position = "bottom") +
     guides(shape = guide_legend("window", override.aes = list(alpha = 1, size = 3)),

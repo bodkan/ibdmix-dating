@@ -463,54 +463,71 @@ ancestry_gr
 ```
 
 ``` r
-p1 <- plot_ancestry(ancestry_gr, deserts_gr)
+filter(ancestry_gr, within_desert) %>% as_tibble() %>%
+  group_by(seqnames) %>%
+  summarise(mean(ancient), mean(modern))
+#> # A tibble: 4 × 3
+#>   seqnames `mean(ancient)` `mean(modern)`
+#>   <fct>              <dbl>          <dbl>
+#> 1 chr1            0.00230        0.00231 
+#> 2 chr3            0.00100        0.000963
+#> 3 chr7            0.000420       0.000286
+#> 4 chr8            0.00458        0.00542
 ```
 
 ``` r
-mean(filter(ancestry_gr, within_desert)$ancient)
-#> [1] 0.002068489
-mean(filter(ancestry_gr, within_desert)$modern)
-#> [1] 0.002244707
-```
-
-``` r
-mean(filter(ancestry_gr, !within_desert)$ancient)
-#> [1] 0.02087286
-mean(filter(ancestry_gr, !within_desert)$modern)
-#> [1] 0.02091298
-```
-
-``` r
-p2 <- plot_correlation(ancestry_gr)
-```
-
-``` r
-cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
-#> `geom_smooth()` using formula = 'y ~ x'
-```
-
-![](figures/unnamed-chunk-23-1.png)<!-- -->
-
-``` r
-ggsave(filename = "results/desert_comparison.pdf", width = 13, height = 7, units = "in")
+ancestry_gr %>% as_tibble() %>% summarise(mean(ancient), mean(modern))
+#> # A tibble: 1 × 2
+#>   `mean(ancient)` `mean(modern)`
+#>             <dbl>          <dbl>
+#> 1          0.0206         0.0206
 ```
 
 ``` r
 ancestry_gr %>%
   as_tibble() %>%
   filter(within_desert) %>%
+  dplyr::rename(chrom = seqnames) %>%
+  mutate(chrom = as.character(chrom)) %>%
+  group_by(chrom) %>% 
   summarise(
     mean(ancient == 0 & modern > 0),
     mean(ancient > 0 & modern == 0),
     mean((ancient == 0 & modern == 0) | (ancient > 0 & modern > 0))
   ) %>%
-  pivot_longer(cols = everything(), values_to = "proportion of sites")
-#> # A tibble: 3 × 2
-#>   name                                                     `proportion of sites`
-#>   <chr>                                                                    <dbl>
-#> 1 mean(ancient == 0 & modern > 0)                                         0.0206
-#> 2 mean(ancient > 0 & modern == 0)                                         0.0172
-#> 3 mean((ancient == 0 & modern == 0) | (ancient > 0 & mode…                0.962
+  pivot_longer(cols = contains("mean"), values_to = "proportion of sites") %>%
+  split(.$chrom)
+#> $chr1
+#> # A tibble: 3 × 3
+#>   chrom name                                               `proportion of sites`
+#>   <chr> <chr>                                                              <dbl>
+#> 1 chr1  mean(ancient == 0 & modern > 0)                                   0.0309
+#> 2 chr1  mean(ancient > 0 & modern == 0)                                   0.0206
+#> 3 chr1  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.948 
+#> 
+#> $chr3
+#> # A tibble: 3 × 3
+#>   chrom name                                               `proportion of sites`
+#>   <chr> <chr>                                                              <dbl>
+#> 1 chr3  mean(ancient == 0 & modern > 0)                                   0.0192
+#> 2 chr3  mean(ancient > 0 & modern == 0)                                   0.0231
+#> 3 chr3  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.958 
+#> 
+#> $chr7
+#> # A tibble: 3 × 3
+#>   chrom name                                               `proportion of sites`
+#>   <chr> <chr>                                                              <dbl>
+#> 1 chr7  mean(ancient == 0 & modern > 0)                                   0     
+#> 2 chr7  mean(ancient > 0 & modern == 0)                                   0.0255
+#> 3 chr7  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.974 
+#> 
+#> $chr8
+#> # A tibble: 3 × 3
+#>   chrom name                                               `proportion of sites`
+#>   <chr> <chr>                                                              <dbl>
+#> 1 chr8  mean(ancient == 0 & modern > 0)                                   0.0315
+#> 2 chr8  mean(ancient > 0 & modern == 0)                                   0     
+#> 3 chr8  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.968
 ```
 
 ``` r
@@ -518,3 +535,100 @@ ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 
 #>     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
 #> 0.000000 0.000000 0.000000 0.002004 0.000000 0.178234
 ```
+
+``` r
+pdf("results/desert_comparison.pdf", width = 12, height = 8)
+
+for (chrom in as.character(unique(seqnames(deserts_gr)))) {
+  p1 <- plot_desert_ancestry(ancestry_gr, deserts_gr, chrom)
+  p2 <- plot_desert_correlation(ancestry_gr, chrom)
+  
+  print(cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7)))
+}
+#> `geom_smooth()` using formula = 'y ~ x'
+#> Warning: Removed 4 rows containing missing values or values outside the scale range
+#> (`geom_point()`).
+#> `geom_smooth()` using formula = 'y ~ x'
+#> Warning: Removed 3 rows containing missing values or values outside the scale range
+#> (`geom_point()`).
+#> `geom_smooth()` using formula = 'y ~ x'
+#> Warning: Removed 1 row containing missing values or values outside the scale range
+#> (`geom_point()`).
+#> `geom_smooth()` using formula = 'y ~ x'
+#> Warning: Removed 2 rows containing missing values or values outside the scale range
+#> (`geom_point()`).
+
+dev.off()
+#> quartz_off_screen 
+#>                 2
+```
+
+``` r
+p1 <- plot_desert_ancestry(ancestry_gr, deserts_gr, "chr7")
+p2 <- plot_desert_correlation(ancestry_gr, "chr7")
+
+cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
+#> `geom_smooth()` using formula = 'y ~ x'
+#> Warning: Removed 1 row containing missing values or values outside the scale range
+#> (`geom_point()`).
+```
+
+![](figures/unnamed-chunk-24-1.png)<!-- -->
+
+## Comparison of tracts between ancient and present-day humans
+
+``` r
+tracts_df <- select(metadata, sampleId, ageAverage) %>% inner_join(tracts, by = c("sampleId" = "ID"))
+tracts_df$width <- tracts_df$end - tracts_df$start
+tracts_df$ageAverage <- ifelse(is.na(tracts_df$ageAverage), 0, tracts_df$ageAverage)
+
+tracts_df$age_group <- cut(
+  tracts_df$ageAverage,
+  breaks = c(Inf, 20e3, 10e3, 5e3, 100, 0),
+)
+
+group_levels <- levels(tracts_df$age_group)
+
+tracts_df <- tracts_df %>%
+  mutate(
+    age_group = as.character(age_group),
+    age_group = ifelse(is.na(age_group), "present-day", age_group),
+    age_group = factor(age_group, levels = c("present-day", group_levels))
+  )
+```
+
+``` r
+group_by(tracts_df, age_group) %>%
+  summarise(mean(width), min(width), max(width))
+#> # A tibble: 5 × 4
+#>   age_group     `mean(width)` `min(width)` `max(width)`
+#>   <fct>                 <dbl>        <dbl>        <dbl>
+#> 1 present-day         134987.        50000      6089550
+#> 2 (100,5e+03]         136335.        50000      6080785
+#> 3 (5e+03,1e+04]       139766.        50000      6527040
+#> 4 (1e+04,2e+04]       144052.        50007      2228427
+#> 5 (2e+04,Inf]         210207.        50010      5347136
+```
+
+``` r
+ggplot(tracts_df) +
+  geom_density(aes(width, color = age_group)) +
+  scale_x_log10()
+```
+
+![](figures/unnamed-chunk-27-1.png)<!-- -->
+
+``` r
+ggplot(tracts_df) +
+  geom_boxplot(aes(age_group, width, color = age_group))
+```
+
+![](figures/unnamed-chunk-28-1.png)<!-- -->
+
+``` r
+ggplot(tracts_df) +
+  geom_boxplot(aes(age_group, width, color = age_group)) +
+  coord_cartesian(ylim = c(50e3, 250e3)) 
+```
+
+![](figures/unnamed-chunk-29-1.png)<!-- -->
