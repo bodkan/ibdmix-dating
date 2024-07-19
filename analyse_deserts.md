@@ -299,145 +299,6 @@ ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
 ggplot2::ggsave(paste0("results/tracts.pdf"), width = 13, height = 7)
 ```
 
-## Testing code for window-based tract analysis on a toy example
-
-### Generate testing tracts in a few individuals
-
-``` r
-tracts_gr <- GRanges(
-  seqnames = "chr7",
-  ranges = IRanges(c(2, 4, 12, 4, 12, 5), c(6, 6, 17, 7, 15, 7)),
-  ID = c("ind1", "ind2", "ind1", "ind3", "ind3", "ind4")
-)
-seqlengths(tracts_gr) <- 20
-
-tracts_gr
-#> GRanges object with 6 ranges and 1 metadata column:
-#>       seqnames    ranges strand |          ID
-#>          <Rle> <IRanges>  <Rle> | <character>
-#>   [1]     chr7       2-6      * |        ind1
-#>   [2]     chr7       4-6      * |        ind2
-#>   [3]     chr7     12-17      * |        ind1
-#>   [4]     chr7       4-7      * |        ind3
-#>   [5]     chr7     12-15      * |        ind3
-#>   [6]     chr7       5-7      * |        ind4
-#>   -------
-#>   seqinfo: 1 sequence from an unspecified genome
-```
-
-``` r
-ggplot(tracts_gr) +
-  geom_rect(aes(group = ID, fill = ID)) +
-  scale_x_continuous(breaks = seq_len(seqlengths(tracts_gr))) +
-  coord_cartesian(xlim = c(1, seqlengths(tracts_gr))) +
-  theme_minimal() +
-  theme(panel.grid = element_blank())
-```
-
-![](figures/unnamed-chunk-16-1.png)<!-- -->
-
-<!-- plot(NA, xlim = c(1, seqlengths(tracts_gr)), ylim = c(1, length(unique(tracts_gr$ID))), ylab = "individual") -->
-<!-- segments(x0 = start(tracts_gr), x1 = end(tracts_gr), y0 = as.numeric(factor(tracts_gr$ID)), y1 = as.numeric(factor(tracts_gr$ID)), -->
-<!--          col = factor(tracts_gr$ID)) -->
-
-### Compute coverage of Neanderthal tracts per site (i.e. proportion of Neanderthal ancestry per site):
-
-``` r
-cov <- coverage(tracts_gr)
-cov <- cov[[1]]
-cov <- cov / length(unique(tracts_gr$ID))
-
-plot(seq_along(cov), cov, type = "o",
-     xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1),
-     ylab = "coverage per site")
-```
-
-![](figures/unnamed-chunk-17-1.png)<!-- -->
-
-# prop_cov \<- cov / length(unique(tracts_gr\$ID))
-
-# prop_cov
-
-# plot(prop_cov\[\[1\]\], type = “o”, xlim = c(1, seqlengths(tracts_gr)))
-
-# runcov \<- runmean(cov, 5)
-
-# runcov
-
-# plot(seq_along(runcov), runcov, type = “o”, xlim = c(0, seqlengths(tracts_gr)), ylab = “runmean() coverage”)
-
-### Generate sliding windows
-
-``` r
-chrom_length <- seqlengths(tracts_gr)
-window_size <- 5
-step_size <- 3
-
-windows <- slidingWindows(IRanges(start = 1, end = chrom_length), width = window_size, step = step_size)
-windows_gr <- GRanges(seqnames = "chr7", ranges = unlist(windows))
-windows_gr$id <- factor(seq_len(length(windows_gr)))
-seqlengths(windows_gr) <- seqlengths(tracts_gr)
-windows_gr
-#> GRanges object with 6 ranges and 1 metadata column:
-#>       seqnames    ranges strand |       id
-#>          <Rle> <IRanges>  <Rle> | <factor>
-#>   [1]     chr7       1-5      * |        1
-#>   [2]     chr7       4-8      * |        2
-#>   [3]     chr7      7-11      * |        3
-#>   [4]     chr7     10-14      * |        4
-#>   [5]     chr7     13-17      * |        5
-#>   [6]     chr7     16-20      * |        6
-#>   -------
-#>   seqinfo: 1 sequence from an unspecified genome
-```
-
-Sanity check by plotting overlapping windows sequentially as tiles:
-
-``` r
-autoplot(windows_gr, aes(group = id), color = NA) + xlim(1, seqlengths(windows_gr))
-```
-
-![](figures/unnamed-chunk-19-1.png)<!-- -->
-
-### Generate testing “mapping gaps”, “centromeres”, etc.
-
-``` r
-gaps_gr <- GRanges(seqnames = "chr7", ranges = IRanges(start = 8, end = 11))
-
-to_remove <- queryHits(findOverlaps(windows_gr, gaps_gr))
-windows_gr$gap <- FALSE
-windows_gr[to_remove]$gap <- TRUE
-```
-
-``` r
-plot(NA, xlim = c(1, seqlengths(windows_gr)), ylim = c(1, length(windows_gr)), ylab = "sliding window number")
-segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id),
-         col = windows_gr$gap + 1)
-```
-
-![](figures/unnamed-chunk-21-1.png)<!-- -->
-
-### Compute windows-based coverage (i.e. proportion of Neanderthal ancestry per window):
-
-``` r
-average_coverage_per_window <- function(windows_gr, cov) {
-  sapply(seq_along(windows_gr), function(i) {
-    start_idx <- start(windows_gr[i])
-    end_idx <- end(windows_gr[i])
-    mean(cov[start_idx:end_idx])
-  })
-}
-mcols(windows_gr)$coverage <- average_coverage_per_window(windows_gr, as.numeric(cov))
-mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
-```
-
-``` r
-plot(windows_gr$midpoint, windows_gr$coverage,
-     ylab = "mean coverage in sliding window", type = "o", xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1))
-```
-
-![](figures/unnamed-chunk-23-1.png)<!-- -->
-
 ## Analysis of tracts inferred in real data
 
 Convert the IBDmix tracts data frame to `GRanges`:
@@ -498,47 +359,46 @@ query <- ucscTableQuery(mySession, table = "gap")
 
 # gap table columns: https://genome.ucsc.edu/cgi-bin/hgTables?db=hg38&hgta_group=map&hgta_track=gap&hgta_table=gap&hgta_doSchema=describe+table+schema
 gaps <- getTable(query) %>%
-  dplyr::filter(grepl("chr\\d+$", chrom)) %>% as_tibble() %>%
-  filter(chrom %in% as.character(seqnames(deserts_gr)))
+  dplyr::filter(grepl("chr\\d+$", chrom)) %>% as_tibble()
 
 gaps_gr <- makeGRangesFromDataFrame(gaps, starts.in.df.are.0based = TRUE, keep.extra.columns = TRUE, ignore.strand = TRUE)
-seqlengths(gaps_gr) <- seqlengths(tracts_gr)[as.character(seqnames(deserts_gr))]
-genome(gaps_gr) <- genome(tracts_gr)
+seqinfo(gaps_gr) <- seqinfo(tracts_gr)
 
 gaps_gr
-#> GRanges object with 75 ranges and 6 metadata columns:
-#>        seqnames              ranges strand |       bin        ix           n
-#>           <Rle>           <IRanges>  <Rle> | <numeric> <numeric> <character>
-#>    [1]     chr1 124535435-142535434      * |         0      1271           N
-#>    [2]     chr1 121535435-124535434      * |        23      1270           N
-#>    [3]     chr1     3845269-3995268      * |        76        47           N
-#>    [4]     chr1   13219913-13319912      * |        85       154           N
-#>    [5]     chr1   17125659-17175658      * |        89       196           N
-#>    ...      ...                 ...    ... .       ...       ...         ...
-#>   [71]     chr3             1-10000      * |       585         1           N
-#>   [72]     chr3         10001-60000      * |       585         2           N
-#>   [73]     chr3 194041962-194047251      * |      2065      1693           N
-#>   [74]     chr3 197962431-198012430      * |      2095      1732           N
-#>   [75]     chr3 198012431-198022430      * |      2095      1733           N
-#>             size            type      bridge
-#>        <numeric>     <character> <character>
-#>    [1]   1.8e+07 heterochromatin          no
-#>    [2]   3.0e+06      centromere          no
-#>    [3]   1.5e+05          contig          no
-#>    [4]   1.0e+05          contig          no
-#>    [5]   5.0e+04           clone         yes
-#>    ...       ...             ...         ...
-#>   [71]     10000        telomere          no
-#>   [72]     50000           clone          no
-#>   [73]      5290          contig          no
-#>   [74]     50000          contig          no
-#>   [75]     10000        telomere          no
+#> GRanges object with 313 ranges and 6 metadata columns:
+#>         seqnames              ranges strand |       bin        ix           n
+#>            <Rle>           <IRanges>  <Rle> | <numeric> <numeric> <character>
+#>     [1]     chr1 124535435-142535434      * |         0      1271           N
+#>     [2]     chr1 121535435-124535434      * |        23      1270           N
+#>     [3]     chr1     3845269-3995268      * |        76        47           N
+#>     [4]     chr1   13219913-13319912      * |        85       154           N
+#>     [5]     chr1   17125659-17175658      * |        89       196           N
+#>     ...      ...                 ...    ... .       ...       ...         ...
+#>   [309]     chr2 149690583-149790582      * |      1727      1221           N
+#>   [310]     chr2 234003742-234053741      * |      2370      1942           N
+#>   [311]     chr2 239801979-239831978      * |      2414      1992           N
+#>   [312]     chr2 240784133-240809132      * |      2422      2001           N
+#>   [313]     chr2 243189374-243199373      * |      2440      2027           N
+#>              size            type      bridge
+#>         <numeric>     <character> <character>
+#>     [1]   1.8e+07 heterochromatin          no
+#>     [2]   3.0e+06      centromere          no
+#>     [3]   1.5e+05          contig          no
+#>     [4]   1.0e+05          contig          no
+#>     [5]   5.0e+04           clone         yes
+#>     ...       ...             ...         ...
+#>   [309]    100000          contig          no
+#>   [310]     50000          contig          no
+#>   [311]     30000          contig          no
+#>   [312]     25000          contig          no
+#>   [313]     10000        telomere          no
 #>   -------
-#>   seqinfo: 4 sequences from hg19 genome
+#>   seqinfo: 22 sequences from hg19 genome
 ```
 
 ``` r
 gaps_gr %>%
+  filter(seqnames %in% seqnames(deserts_gr)) %>%
   autoplot(aes(fill = type), color = NA) +
   theme_bw() +
   theme(panel.grid = element_blank(), legend.position = "bottom")
@@ -551,34 +411,55 @@ gaps_gr %>%
 #> generated.
 ```
 
-![](figures/unnamed-chunk-26-1.png)<!-- -->
-
-### Generate sliding windows along the chromosome
-
-``` r
-chrom <- "chr7"
-
-window_size <- 200e3
-step_size <- 50e3
-```
+![](figures/unnamed-chunk-17-1.png)<!-- -->
 
 ### Analyse tracts in windows
 
 ``` r
-windows_gr <- generate_windows(tracts_gr, gaps_gr, chrom = "chr7", window_size = 200e3, step_size = 50e3)
+windows_gr <- generate_windows(gaps_gr, window_size = 200e3, step_size = 50e3)
+# windows_gr <- filter(windows_gr, seqnames == "chr7")
+
+# mark windows falling within archaic deserts
+windows_gr$within_desert <- FALSE
+windows_gr[queryHits(findOverlaps(windows_gr, deserts_gr))]$within_desert <- TRUE
 
 ancestry_modern_gr <- filter(tracts_gr, set == "Modern") %>% compute_ancestry(windows_gr)
 ancestry_ancient_gr <- filter(tracts_gr, set == "Ancient") %>% compute_ancestry(windows_gr)
 
-ancestry_gr <- granges(windows_gr)
-mcols(ancestry_gr) <- cbind(
-  mcols(windows_gr),
-  mcols(ancestry_ancient_gr)["coverage"] %>% setNames("ancient"),
-  mcols(ancestry_modern_gr)["coverage"] %>% setNames("modern") 
-)
-mcols(ancestry_gr)$within_desert <-
-  start(ancestry_gr) >= start(filter(deserts_gr, seqnames == chrom)) &
-  end(ancestry_gr) <= end(filter(deserts_gr, seqnames == chrom))
+ancestry_gr <- windows_gr
+ancestry_gr$modern <- ancestry_modern_gr$coverage
+ancestry_gr$ancient <- ancestry_ancient_gr$coverage
+
+ancestry_gr
+#> GRanges object with 57567 ranges and 5 metadata columns:
+#>           seqnames            ranges strand |  midpoint       gap within_desert
+#>              <Rle>         <IRanges>  <Rle> | <numeric> <logical>     <logical>
+#>       [1]     chr1          1-200000      * |    100000      TRUE         FALSE
+#>       [2]     chr1      50001-250000      * |    150000      TRUE         FALSE
+#>       [3]     chr1     100001-300000      * |    200000      TRUE         FALSE
+#>       [4]     chr1     150001-350000      * |    250000      TRUE         FALSE
+#>       [5]     chr1     200001-400000      * |    300000      TRUE         FALSE
+#>       ...      ...               ...    ... .       ...       ...           ...
+#>   [57563]    chr22 50950001-51150000      * |  51050000     FALSE         FALSE
+#>   [57564]    chr22 51000001-51200000      * |  51100000     FALSE         FALSE
+#>   [57565]    chr22 51050001-51250000      * |  51150000      TRUE         FALSE
+#>   [57566]    chr22 51100001-51300000      * |  51200000      TRUE         FALSE
+#>   [57567]    chr22 51150001-51304566      * |  51227284      TRUE         FALSE
+#>              modern    ancient
+#>           <numeric>  <numeric>
+#>       [1]         0          0
+#>       [2]         0          0
+#>       [3]         0          0
+#>       [4]         0          0
+#>       [5]         0          0
+#>       ...       ...        ...
+#>   [57563] 0.0204461 0.01162623
+#>   [57564] 0.0204461 0.01138138
+#>   [57565] 0.0203071 0.01102865
+#>   [57566] 0.0127992 0.00683655
+#>   [57567] 0.0000000 0.00000000
+#>   -------
+#>   seqinfo: 22 sequences from hg19 genome
 ```
 
 ``` r
@@ -587,16 +468,16 @@ p1 <- plot_ancestry(ancestry_gr, deserts_gr)
 
 ``` r
 mean(filter(ancestry_gr, within_desert)$ancient)
-#> [1] 0.0004358431
+#> [1] 0.002068489
 mean(filter(ancestry_gr, within_desert)$modern)
-#> [1] 0.000297037
+#> [1] 0.002244707
 ```
 
 ``` r
 mean(filter(ancestry_gr, !within_desert)$ancient)
-#> [1] 0.02306509
+#> [1] 0.02087286
 mean(filter(ancestry_gr, !within_desert)$modern)
-#> [1] 0.02291171
+#> [1] 0.02091298
 ```
 
 ``` r
@@ -608,7 +489,7 @@ cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
 #> `geom_smooth()` using formula = 'y ~ x'
 ```
 
-![](figures/unnamed-chunk-33-1.png)<!-- -->
+![](figures/unnamed-chunk-23-1.png)<!-- -->
 
 ``` r
 ggsave(filename = "results/desert_comparison.pdf", width = 13, height = 7, units = "in")
@@ -627,13 +508,13 @@ ancestry_gr %>%
 #> # A tibble: 3 × 2
 #>   name                                                     `proportion of sites`
 #>   <chr>                                                                    <dbl>
-#> 1 mean(ancient == 0 & modern > 0)                                         0     
-#> 2 mean(ancient > 0 & modern == 0)                                         0.0265
-#> 3 mean((ancient == 0 & modern == 0) | (ancient > 0 & mode…                0.974
+#> 1 mean(ancient == 0 & modern > 0)                                         0.0206
+#> 2 mean(ancient > 0 & modern == 0)                                         0.0172
+#> 3 mean((ancient == 0 & modern == 0) | (ancient > 0 & mode…                0.962
 ```
 
 ``` r
 ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 100 } %>% summary()
 #>     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
-#> 0.000000 0.000000 0.000000 0.004347 0.000000 0.178234
+#> 0.000000 0.000000 0.000000 0.002004 0.000000 0.178234
 ```
