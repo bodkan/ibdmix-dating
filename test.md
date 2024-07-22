@@ -25,7 +25,7 @@ source(here::here("utils.R"))
 #>     filter
 ```
 
-## Testing code for window-based tract analysis on a toy example
+## Testing window-based tract analysis on a toy example
 
 ### Generate testing tracts in a few individuals
 
@@ -50,6 +50,10 @@ tracts_gr
 #>   -------
 #>   seqinfo: 1 sequence from an unspecified genome
 ```
+
+### Compute Neanderthal ancestry proportions in windows
+
+Result is [here](test_windows.pdf).
 
 ``` r
 pdf("test_windows.pdf", width = 10, height = 13)
