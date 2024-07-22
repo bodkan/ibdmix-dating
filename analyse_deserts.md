@@ -192,7 +192,7 @@ metadata %>%
     coord_sf(crs = 3035)
 ```
 
-![](figures/unnamed-chunk-9-1.png)<!-- -->
+![](analyse_deserts_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 Out of the various “age” columns in the GeoGenetics metadata, which one
 is actually usable?
@@ -227,7 +227,7 @@ metadata %>%
 #> `stat_bin()` using `bins = 30`. Pick better value with `binwidth`.
 ```
 
-![](figures/unnamed-chunk-11-1.png)<!-- -->
+![](analyse_deserts_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
 ## Inspect Neanderthal tracts in ancient and present-day individuals
 
@@ -293,10 +293,10 @@ ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
   ggtitle("Neanderthal tracts in Eurasians")
 ```
 
-![](figures/unnamed-chunk-13-1.png)<!-- -->
+![](analyse_deserts_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 ``` r
-ggplot2::ggsave(paste0("results/tracts.pdf"), width = 13, height = 7)
+ggplot2::ggsave(paste0("deserts_1+3+7+8.pdf"), width = 13, height = 7)
 ```
 
 ## Analysis of tracts inferred in real data
@@ -411,7 +411,7 @@ gaps_gr %>%
 #> generated.
 ```
 
-![](figures/unnamed-chunk-17-1.png)<!-- -->
+![](analyse_deserts_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 ### Analyse tracts in windows
 
@@ -537,7 +537,7 @@ ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 
 ```
 
 ``` r
-pdf("results/desert_comparison.pdf", width = 12, height = 8)
+pdf("deserts_comparison.pdf", width = 12, height = 8)
 
 for (chrom in as.character(unique(seqnames(deserts_gr)))) {
   p1 <- plot_desert_ancestry(ancestry_gr, deserts_gr, chrom)
@@ -573,7 +573,7 @@ cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
 #> (`geom_point()`).
 ```
 
-![](figures/unnamed-chunk-24-1.png)<!-- -->
+![](analyse_deserts_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ## Comparison of tracts between ancient and present-day humans
 
@@ -616,14 +616,14 @@ ggplot(tracts_df) +
   scale_x_log10()
 ```
 
-![](figures/unnamed-chunk-27-1.png)<!-- -->
+![](analyse_deserts_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
   geom_boxplot(aes(age_group, width, color = age_group))
 ```
 
-![](figures/unnamed-chunk-28-1.png)<!-- -->
+![](analyse_deserts_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -631,12 +631,12 @@ ggplot(tracts_df) +
   coord_cartesian(ylim = c(50e3, 250e3)) 
 ```
 
-![](figures/unnamed-chunk-29-1.png)<!-- -->
+![](analyse_deserts_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
 ## Chen *et al.* tracts
 
 ``` r
-chen_tracts <- read_tsv("Chen et al. - Neanderthal sequence in 1000 genome.50kb.txt") %>%
+chen_tracts <- read_tsv("data/Chen et al. - Neanderthal sequence in 1000 genome.50kb.txt") %>%
   filter(anc == "EUR") %>%
   select(ID, chrom = chr, start, end) %>%
   mutate(chrom = paste0("chr", chrom), set = "Chen et al.")
@@ -688,4 +688,4 @@ ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
   ggtitle("Neanderthal tracts in Eurasians")
 ```
 
-![](figures/unnamed-chunk-33-1.png)<!-- -->
+![](analyse_deserts_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
