@@ -11,8 +11,8 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.path = "figures/",
-  fig.width = 10,
-  fig.height = 8
+  fig.width = 13,
+  fig.height = 9 
 )
 
 set.seed(42)
@@ -333,4 +333,46 @@ ggplot(tracts_df) +
   coord_cartesian(ylim = c(50e3, 250e3)) 
 ```
 
+
+## Chen _et al._ tracts
+
+```{r}
+chen_tracts <- read_tsv("Chen et al. - Neanderthal sequence in 1000 genome.50kb.txt") %>%
+  filter(anc == "EUR") %>%
+  select(ID, chrom = chr, start, end) %>%
+  mutate(chrom = paste0("chr", chrom), set = "Chen et al.")
+```
+
+```{r}
+all_tracts <- tracts %>%
+  filter(set == "Modern") %>%
+  bind_rows(chen_tracts) %>% 
+  filter(chrom == "chr1")
+```
+
+```{r}
+group_by(all_tracts, set) %>% tally()
+```
+
+### Comparison of Chen _at al._'s and Alba's results
+
+```{r}
+all_tracts %>%
+ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
+  geom_segment(linewidth = 1) +
+  geom_rect(data = filter(desert_coords, chrom == "chr1"), aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
+  geom_vline(data = filter(desert_coords, chrom == "chr1"), aes(xintercept = start), linetype = "dashed", color = "red") +
+  geom_vline(data = filter(desert_coords, chrom == "chr1"), aes(xintercept = end), linetype = "dashed", color = "red") +
+  labs(x = "position along a chromosome [bp]", y = "each row = tracts in an individual") +
+  theme_bw() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    panel.border = element_blank(),
+    panel.grid = element_blank()
+  ) +
+  scale_x_continuous(labels = scales::comma) +
+  facet_grid(set ~ chrom, scales = "free") +
+  ggtitle("Neanderthal tracts in Eurasians")
+```
 
