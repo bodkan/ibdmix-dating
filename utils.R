@@ -8,7 +8,7 @@ library(GenomicRanges)
 library(plyranges)
 
 read_metadata <- function() {
-  raw_info <- read_tsv("neo.impute.1000g.sampleInfo_clusterInfo.txt")
+  raw_info <- read_tsv("data/neo.impute.1000g.sampleInfo_clusterInfo.txt")
 
   info <-
     raw_info %>%
@@ -21,7 +21,7 @@ read_metadata <- function() {
 read_tracts <- function(set, metadata) {
   info <- filter(metadata, groupAge == set)
 
-  raw_tracts <- read_tsv(here::here("Vindija33.19_raw_eurasian_wModern.gz"))
+  raw_tracts <- read_tsv(here::here("data/Vindija33.19_raw_eurasian_wModern.gz"))
 
   tracts <- raw_tracts %>%
     mutate(chrom = paste0("chr", chrom)) %>%
