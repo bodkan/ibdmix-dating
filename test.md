@@ -12,7 +12,6 @@ suppressPackageStartupMessages({
 #> Warning: package 'GenomeInfoDb' was built under R version 4.3.3
 
 source(here::here("utils.R"))
-#> Linking to GEOS 3.11.0, GDAL 3.5.3, PROJ 9.1.0; sf_use_s2() is TRUE
 #> 
 #> Attaching package: 'plyranges'
 #> The following object is masked from 'package:IRanges':
@@ -53,6 +52,8 @@ tracts_gr
 ```
 
 ``` r
+pdf("test_windows.pdf", width = 10, height = 13)
+
 par(mfrow = c(4, 1))
 
 plot(NA, xlim = c(1, seqlengths(tracts_gr)), ylim = c(1, length(unique(tracts_gr$ID))), ylab = "individual", yaxt = "n")
@@ -129,6 +130,8 @@ mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
 
 plot(windows_gr$midpoint, windows_gr$coverage,
      ylab = "mean coverage in sliding window", type = "o", xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1))
-```
 
-![](test_analysis_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+dev.off()
+#> quartz_off_screen 
+#>                 2
+```

@@ -48,8 +48,8 @@ seqlengths(tracts_gr) <- 20
 tracts_gr
 ```
 
-```{r, fig.height=13, fig.width=10}
-pdf("test_windows.pdf")
+```{r}
+pdf("test_windows.pdf", width = 10, height = 13)
 
 par(mfrow = c(4, 1))
 
