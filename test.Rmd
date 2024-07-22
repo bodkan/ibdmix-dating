@@ -49,6 +49,8 @@ tracts_gr
 ```
 
 ```{r, fig.height=13, fig.width=10}
+pdf("test_windows.pdf")
+
 par(mfrow = c(4, 1))
 
 plot(NA, xlim = c(1, seqlengths(tracts_gr)), ylim = c(1, length(unique(tracts_gr$ID))), ylab = "individual", yaxt = "n")
@@ -114,5 +116,6 @@ mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
 
 plot(windows_gr$midpoint, windows_gr$coverage,
      ylab = "mean coverage in sliding window", type = "o", xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1))
-```
 
+dev.off()
+```
