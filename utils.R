@@ -111,6 +111,7 @@ plot_desert_ancestry <- function(ancestry_gr, deserts_gr, chrom) {
                linetype = guide_legend("")) +
         labs(x = "genomic coordinate [bp]", y = "proportion of Neanderthal ancestry") +
         scale_x_continuous(labels = scales::comma) +
+        scale_y_continuous(labels = scales::percent_format(accuracy = 0.01)) +
         coord_cartesian(ylim = c(0, 0.1)) +
         scale_linetype_manual(values = "dashed") +
         theme_minimal() +
@@ -132,8 +133,6 @@ plot_desert_correlation <- function(ancestry_gr, chrom) {
     geom_abline(slope = 1, linetype = "dashed") +
     geom_hline(aes(color = "modern", yintercept = mean(ancestry_df$modern)), linetype = "dashed", color = "blue") +
     geom_vline(aes(color = "ancient", xintercept = mean(ancestry_df$ancient)), linetype = "dashed", color = "orange") +
-    # scale_x_log10(labels = scales::percent_format(accuracy = 0.01), limits = c(0.1, NA)) +
-    # scale_y_log10(labels = scales::percent_format(accuracy = 0.01)) +
     scale_x_log10(breaks = c(0.0001, mean(ancestry_df$ancient), 1), labels = scales::percent_format(accuracy = 0.01), limits = c(0.00001, 1)) +
     scale_y_log10(breaks = c(0.0001, mean(ancestry_df$modern), 1), labels = scales::percent_format(accuracy = 0.01), limits = c(0.00001, 1)) +
     labs(x = "Neanderthal ancestry proportion\nin ancient Eurasians [%, log scale]",
