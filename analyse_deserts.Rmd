@@ -267,7 +267,7 @@ ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 
 ```
 
 ```{r}
-pdf("deserts_ancient_vs_modern.pdf", width = 12, height = 8)
+pdf("deserts_comparison.pdf", width = 12, height = 8)
 
 for (chrom in as.character(unique(seqnames(deserts_gr)))) {
   p1 <- plot_desert_ancestry(ancestry_gr, deserts_gr, chrom)
@@ -334,7 +334,7 @@ ggplot(tracts_df) +
 ## Chen _et al._ tracts
 
 ```{r}
-chen_tracts <- read_tsv("Chen et al. - Neanderthal sequence in 1000 genome.50kb.txt") %>%
+chen_tracts <- read_tsv("data/Chen et al. - Neanderthal sequence in 1000 genome.50kb.txt") %>%
   filter(anc == "EUR") %>%
   select(ID, chrom = chr, start, end) %>%
   mutate(chrom = paste0("chr", chrom), set = "Chen et al.")
