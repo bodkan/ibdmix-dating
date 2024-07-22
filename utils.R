@@ -135,8 +135,8 @@ plot_desert_correlation <- function(ancestry_gr, chrom) {
     geom_vline(aes(color = "ancient", xintercept = mean(ancestry_df$ancient)), linetype = "dashed", color = "orange") +
     scale_x_log10(breaks = c(0.0001, mean(ancestry_df$ancient), 1), labels = scales::percent_format(accuracy = 0.01), limits = c(0.00001, 1)) +
     scale_y_log10(breaks = c(0.0001, mean(ancestry_df$modern), 1), labels = scales::percent_format(accuracy = 0.01), limits = c(0.00001, 1)) +
-    labs(x = "Neanderthal ancestry proportion\nin ancient Eurasians [%, log scale]",
-         y = "Neanderthal ancestry proportion\nin present-day Eurasians [%, log scale]") +
+    labs(x = "Neanderthal ancestry proportion\nin ancient Eurasians [log scale]",
+         y = "Neanderthal ancestry proportion\nin present-day Eurasians [log scale]") +
     coord_fixed() +
     theme_minimal() +
     theme(legend.position = "bottom") +
