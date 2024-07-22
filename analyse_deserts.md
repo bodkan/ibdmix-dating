@@ -632,3 +632,60 @@ ggplot(tracts_df) +
 ```
 
 ![](figures/unnamed-chunk-29-1.png)<!-- -->
+
+## Chen *et al.* tracts
+
+``` r
+chen_tracts <- read_tsv("Chen et al. - Neanderthal sequence in 1000 genome.50kb.txt") %>%
+  filter(anc == "EUR") %>%
+  select(ID, chrom = chr, start, end) %>%
+  mutate(chrom = paste0("chr", chrom), set = "Chen et al.")
+#> Rows: 946497 Columns: 9
+#> ── Column specification ────────────────────────────────────────────────────────
+#> Delimiter: "\t"
+#> chr (3): pop, anc, ID
+#> dbl (6): chr, start, end, LOD, maxLOD, size
+#> 
+#> ℹ Use `spec()` to retrieve the full column specification for this data.
+#> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+```
+
+``` r
+all_tracts <- tracts %>%
+  filter(set == "Modern") %>%
+  bind_rows(chen_tracts) %>% 
+  filter(chrom == "chr1")
+```
+
+``` r
+group_by(all_tracts, set) %>% tally()
+#> # A tibble: 2 × 2
+#>   set             n
+#>   <chr>       <int>
+#> 1 Chen et al. 22308
+#> 2 Modern      18737
+```
+
+### Comparison of Chen *at al.*’s and Alba’s results
+
+``` r
+all_tracts %>%
+ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
+  geom_segment(linewidth = 1) +
+  geom_rect(data = filter(desert_coords, chrom == "chr1"), aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
+  geom_vline(data = filter(desert_coords, chrom == "chr1"), aes(xintercept = start), linetype = "dashed", color = "red") +
+  geom_vline(data = filter(desert_coords, chrom == "chr1"), aes(xintercept = end), linetype = "dashed", color = "red") +
+  labs(x = "position along a chromosome [bp]", y = "each row = tracts in an individual") +
+  theme_bw() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    panel.border = element_blank(),
+    panel.grid = element_blank()
+  ) +
+  scale_x_continuous(labels = scales::comma) +
+  facet_grid(set ~ chrom, scales = "free") +
+  ggtitle("Neanderthal tracts in Eurasians")
+```
+
+![](figures/unnamed-chunk-33-1.png)<!-- -->
