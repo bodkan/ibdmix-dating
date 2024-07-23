@@ -144,3 +144,40 @@ plot_desert_correlation <- function(ancestry_gr, chrom) {
            linetype = "none") +
     scale_shape_manual(values = c(4, 20))
 }
+
+plot_desert_ancestry2 <- function(ancestry_gr, deserts_gr, chrom) {
+  desert_df <- deserts_gr %>% filter(seqnames == chrom) %>% as_tibble
+
+  ancestry_df <- as_tibble(ancestry_gr) %>%
+    filter(seqnames == chrom) %>%
+    select(chrom = seqnames, start, end, modern, chen, gap, midpoint)
+
+  ancestry_df %>%
+    filter(start >= (desert_df$start * 0.9) & end <= (desert_df$end * 1.1)) %>%
+    {
+      ggplot(data = .) +
+        geom_rect(data = desert_df, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
+
+        geom_line(aes(midpoint, chen), color = "orange") +
+        geom_point(data = filter(., chen > 0), aes(midpoint, chen, color = "Chen et al."), size = 0.8) +
+
+        geom_line(aes(midpoint, modern), color = "blue") +
+        geom_point(data = filter(., modern > 0), aes(midpoint, modern, color = "present-day individuals"), size = 0.8) +
+
+        geom_vline(data = desert_df, aes(xintercept = start, linetype = "desert boundary"), color = "red") +
+        geom_vline(data = desert_df, aes(xintercept = end, linetype = "desert boundary"), color = "red") +
+
+        scale_color_manual(values = c("orange", "blue")) +
+        guides(color = guide_legend("", override.aes = list(size = 5)), linetype = guide_legend("")) +
+
+        labs(x = "genomic coordinate [bp]", y = "proportion of Neanderthal ancestry") +
+        scale_x_continuous(labels = scales::comma) +
+        scale_y_continuous(labels = scales::percent_format(accuracy = 0.01)) +
+        # coord_cartesian(ylim = c(0, 0.1)) +
+        scale_linetype_manual(values = "dashed") +
+        theme_minimal() +
+        theme(legend.position = "bottom") +
+        ggtitle(paste("Archaic ancestry desert on chromosome", gsub("chr", "", .$chrom[1])))
+    }
+
+}

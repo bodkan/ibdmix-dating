@@ -373,3 +373,28 @@ ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
   ggtitle("Neanderthal tracts in Eurasians")
 ```
 
+### Deserts in the Chen _et al._ data
+
+```{r}
+chen_gr <- chen_tracts %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+seqlengths(chen_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(chen_gr))]
+genome(chen_gr) <- "hg19"
+
+chen_gr
+```
+
+```{r}
+ancestry_chen_gr <- chen_gr %>% compute_ancestry(windows_gr)
+
+ancestry_gr <- windows_gr
+
+ancestry_gr$chen <- ancestry_chen_gr$coverage
+
+ancestry_gr
+```
+
+```{r}
+plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr7")
+```
+
