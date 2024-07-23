@@ -50,8 +50,6 @@ tracts_gr
 
 ### Compute Neanderthal ancestry proportions in windows
 
-Result is [here](test_windows.pdf).
-
 ```{r}
 pdf("test_windows.pdf", width = 10, height = 13)
 
@@ -128,7 +126,7 @@ legend("topleft", fill = c("black", "red"), legend = c("window not in a 'centrom
 dev.off()
 ```
 
-![](test_windows.pdf){width=100%}
+### Result of the above is [here](test_windows.pdf)
 
 ### Testing a dedicated function `compute_ancestry()`
 
