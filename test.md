@@ -144,7 +144,7 @@ dev.off()
 #>                 2
 ```
 
-<embed src="test_windows.pdf" width="800px" height="1000px" type="application/pdf" />
+<embed src="test_windows.pdf" style="width:100.0%" />
 
 ### Testing a dedicated function `compute_ancestry()`
 
@@ -172,4 +172,4 @@ ggplot(.) +
 }
 ```
 
-![](test_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](test_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->

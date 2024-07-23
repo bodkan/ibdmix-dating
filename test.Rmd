@@ -128,9 +128,7 @@ legend("topleft", fill = c("black", "red"), legend = c("window not in a 'centrom
 dev.off()
 ```
 
-```{r out.height = "1000px", out.width='800px', echo=F, fig.pos='H'}
-knitr::include_graphics("test_windows.pdf")
-```
+![](test_windows.pdf){width=100%}
 
 ### Testing a dedicated function `compute_ancestry()`
 
