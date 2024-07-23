@@ -689,3 +689,73 @@ ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
 ```
 
 ![](deserts_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+
+### Deserts in the Chen *et al.* data
+
+``` r
+chen_gr <- chen_tracts %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+
+seqlengths(chen_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(chen_gr))]
+genome(chen_gr) <- "hg19"
+
+chen_gr
+#> GRanges object with 215291 ranges and 2 metadata columns:
+#>            seqnames              ranges strand |          ID         set
+#>               <Rle>           <IRanges>  <Rle> | <character> <character>
+#>        [1]     chr1     2372140-2422614      * |     HG00349 Chen et al.
+#>        [2]     chr1     2372140-2424765      * |     HG00276 Chen et al.
+#>        [3]     chr1     2372140-2424765      * |     HG00190 Chen et al.
+#>        [4]     chr1     2372140-2424765      * |     HG00306 Chen et al.
+#>        [5]     chr1     2372140-2424765      * |     HG00143 Chen et al.
+#>        ...      ...                 ...    ... .         ...         ...
+#>   [215287]     chr9 138820472-138874581      * |     HG00188 Chen et al.
+#>   [215288]     chr9 138964113-139031913      * |     HG00181 Chen et al.
+#>   [215289]     chr9 139091491-139143902      * |     HG00145 Chen et al.
+#>   [215290]     chr9 139091491-139144245      * |     NA20821 Chen et al.
+#>   [215291]     chr9 139093978-139144245      * |     NA12413 Chen et al.
+#>   -------
+#>   seqinfo: 22 sequences from hg19 genome
+```
+
+``` r
+ancestry_chen_gr <- chen_gr %>% compute_ancestry(windows_gr)
+
+ancestry_gr$chen <- ancestry_chen_gr$coverage
+
+ancestry_gr
+#> GRanges object with 57567 ranges and 6 metadata columns:
+#>           seqnames            ranges strand |  midpoint       gap within_desert
+#>              <Rle>         <IRanges>  <Rle> | <numeric> <logical>     <logical>
+#>       [1]     chr1          1-200000      * |    100000      TRUE         FALSE
+#>       [2]     chr1      50001-250000      * |    150000      TRUE         FALSE
+#>       [3]     chr1     100001-300000      * |    200000      TRUE         FALSE
+#>       [4]     chr1     150001-350000      * |    250000      TRUE         FALSE
+#>       [5]     chr1     200001-400000      * |    300000      TRUE         FALSE
+#>       ...      ...               ...    ... .       ...       ...           ...
+#>   [57563]    chr22 50950001-51150000      * |  51050000     FALSE         FALSE
+#>   [57564]    chr22 51000001-51200000      * |  51100000     FALSE         FALSE
+#>   [57565]    chr22 51050001-51250000      * |  51150000      TRUE         FALSE
+#>   [57566]    chr22 51100001-51300000      * |  51200000      TRUE         FALSE
+#>   [57567]    chr22 51150001-51304566      * |  51227284      TRUE         FALSE
+#>              modern    ancient        chen
+#>           <numeric>  <numeric>   <numeric>
+#>       [1]         0          0           0
+#>       [2]         0          0           0
+#>       [3]         0          0           0
+#>       [4]         0          0           0
+#>       [5]         0          0           0
+#>       ...       ...        ...         ...
+#>   [57563] 0.0204461 0.01162623 5.00457e-04
+#>   [57564] 0.0204461 0.01138138 3.43936e-06
+#>   [57565] 0.0203071 0.01102865 0.00000e+00
+#>   [57566] 0.0127992 0.00683655 0.00000e+00
+#>   [57567] 0.0000000 0.00000000 0.00000e+00
+#>   -------
+#>   seqinfo: 22 sequences from hg19 genome
+```
+
+``` r
+plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr7")
+```
+
+![](deserts_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->

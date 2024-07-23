@@ -387,8 +387,6 @@ chen_gr
 ```{r}
 ancestry_chen_gr <- chen_gr %>% compute_ancestry(windows_gr)
 
-ancestry_gr <- windows_gr
-
 ancestry_gr$chen <- ancestry_chen_gr$coverage
 
 ancestry_gr
