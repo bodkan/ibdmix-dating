@@ -60,7 +60,7 @@ pdf("test_windows.pdf", width = 10, height = 13)
 
 par(mfrow = c(4, 1))
 
-plot(NA, xlim = c(1, seqlengths(tracts_gr)), ylim = c(1, length(unique(tracts_gr$ID))), ylab = "individual", yaxt = "n")
+plot(NA, xlim = c(1, seqlengths(tracts_gr)), ylim = c(1, length(unique(tracts_gr$ID))), ylab = "individual", yaxt = "n", main = "Archaic ancestry tracts in four individuals")
 segments(x0 = start(tracts_gr), x1 = end(tracts_gr), y0 = as.numeric(factor(tracts_gr$ID)), y1 = as.numeric(factor(tracts_gr$ID)), col = factor(tracts_gr$ID))
 axis(2, at = 1:length(unique(tracts_gr$ID)), labels = factor(unique(tracts_gr$ID)))
 
@@ -71,8 +71,8 @@ cov <- cov[[1]]
 cov <- cov / length(unique(tracts_gr$ID))
 
 plot(seq_along(cov), cov, type = "o",
-     xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1),
-     ylab = "coverage per site")
+     xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1), pch = 20,
+     ylab = "coverage per site", main = "Tract coverage (i.e. archaic ancestry proportion) per site")
 
 # prop_cov <- cov / length(unique(tracts_gr$ID))
 # prop_cov
@@ -116,9 +116,10 @@ to_remove <- queryHits(findOverlaps(windows_gr, gaps_gr))
 windows_gr$gap <- FALSE
 windows_gr[to_remove]$gap <- TRUE
 
-plot(NA, xlim = c(1, seqlengths(windows_gr)), ylim = c(1, length(windows_gr)), ylab = "sliding window number")
+plot(NA, xlim = c(1, seqlengths(windows_gr)), ylim = c(1, length(windows_gr)), ylab = "sliding window number", main = "Coordinates of sliding windows along a chromosome")
 segments(x0 = start(windows_gr), x1 = end(windows_gr), y0 = as.numeric(windows_gr$id), y1 = as.numeric(windows_gr$id),
          col = windows_gr$gap + 1)
+legend("topleft", fill = c("black", "red"), legend = c("window not in a 'centromere/telomere'", "window in a 'centromere/telomere (to be excluded)"))
 
 # compute windows-based coverage (i.e. proportion of Neanderthal ancestry per window)
 
@@ -133,9 +134,42 @@ mcols(windows_gr)$coverage <- average_coverage_per_window(windows_gr, as.numeric
 mcols(windows_gr)$midpoint <- (start(windows_gr) + end(windows_gr)) / 2
 
 plot(windows_gr$midpoint, windows_gr$coverage,
-     ylab = "mean coverage in sliding window", type = "o", xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1))
+     ylab = "mean coverage in sliding window", type = "o", xlim = c(1, seqlengths(tracts_gr)), ylim = c(0, 1),
+     col = windows_gr$gap + 1, pch = 20,
+     main = "Tract coverage (i.e. archaic ancestry proportion) in windows")
+legend("topleft", fill = c("black", "red"), legend = c("window not in a 'centromere/telomere'", "window in a 'centromere/telomere (to be excluded)"))
 
 dev.off()
 #> quartz_off_screen 
 #>                 2
 ```
+
+<embed src="test_windows.pdf" width="800px" height="1000px" type="application/pdf" />
+
+### Testing a dedicated function `compute_ancestry()`
+
+``` r
+ancestry_gr <- compute_ancestry(tracts_gr, windows_gr)
+```
+
+### Testing code from a dedicated function `plot_desert_ancestry()`
+
+``` r
+as_tibble(ancestry_gr) %>%
+{
+ggplot(.) +
+  geom_line(aes(midpoint, coverage), color = "blue") +
+  geom_point(data = filter(., coverage > 0), aes(midpoint, coverage), size = 0.8) +
+  guides(color = guide_legend("", override.aes = list(size = 5)),
+         linetype = guide_legend("")) +
+  labs(x = "genomic coordinate [bp]", y = "proportion of Neanderthal ancestry") +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 0.01)) +
+  coord_cartesian(ylim = c(0, 1)) +
+  scale_linetype_manual(values = "dashed") +
+  theme_minimal() +
+  theme(legend.position = "bottom") 
+}
+```
+
+![](test_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
