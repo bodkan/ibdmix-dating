@@ -361,6 +361,9 @@ ggplot(tracts_df) +
 ```{r}
 sim_tracts <- read.table(url("https://github.com/bodkan/ku-introgression2024/raw/main/tracts.tsv"), sep = "\t", header = TRUE)
 
+average_bins <- aggregate(length ~ bin, data = sim_tracts, FUN = mean)
+(bin_step <- mean(diff(average_bins$length)))
+
 # get the bin numbers
 bins <- sort(unique(sim_tracts$bin))
 
@@ -374,95 +377,144 @@ plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of 
 ```{r}
 r <- 1e-8
 
-fit <- MASS::fitdistr(sim_tracts$length, "exponential")
-
-average_bins <- aggregate(length ~ bin, data = sim_tracts, FUN = mean)
-
-# compute the difference between bins to get "average bin step size"
-(bin_step <- mean(diff(average_bins$length)))
+fit_fitdistr <- MASS::fitdistr(sim_tracts$length, "exponential")
 
 plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
 
-lambda <- fit$estimate["rate"]
-y <- dexp(bins, rate = lambda * bin_step)
-lines(bins, y * sum(counts), col = "red", lty = 2)
+lambda_fitdistr <- fit_fitdistr$estimate["rate"]
+y_fitdistr <- dexp(bins, rate = lambda_fitdistr * bin_step)
+lines(bins, y_fitdistr * sum(counts), col = "red", lty = 2)
 
-t <- 1 / (r * 1 / lambda)
+t <- 1 / (r * 1 / lambda_fitdistr)
 cat("Result from fitdistr: ", t, "\n")
 
-lambda <- 1 / mean(sim_tracts$length)
-y <- dexp(bins, rate = lambda * bin_step)
-lines(bins, y * sum(counts), col = "green", lty = 2)
+lambda_mean <- 1 / mean(sim_tracts$length)
+y_mean <- dexp(bins, rate = lambda_mean * bin_step)
+lines(bins, y_mean * sum(counts), col = "green", lty = 2)
 
-t <- 1 / (r * 1 / lambda)
+t <- 1 / (r * 1 / lambda_mean)
 cat("Result from simple equation: ", t, "\n")
 ```
 
+```{r}
+r <- 1e-8
+
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+
+fit_nls <- nls(counts ~ SSasymp(bins, Asym, R0, lrc))
+summary(fit_nls)
+
+# https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp
+lambda_nls <- exp(coef(fit_nls)["lrc"])
+y_nls <- dexp(bins, rate = lambda_nls)
+lines(bins, y_nls * sum(counts), col = "red")
+
+t <- 1 / (bin_step * r * 1 / lambda_nls)
+cat("Result from nls: ", t, "\n")
+
+lines(bins, y_mean * sum(counts), col = "green", lty = 2)
+
+t <- 1 / (r * 1 / lambda_mean)
+cat("Result from simple equation: ", t, "\n")
+```
 
 
 ### Filtered tracts (truncating the shortest tracts)
 
 ```{r}
-truncated_sim_tracts <- sim_tracts %>% filter(bin >= 6)
+n_truncated <- 1
 
-bins <- sort(unique(truncated_sim_tracts$bin))
+truncated_sim_tracts <- sim_tracts %>% filter(bin > n_truncated)
 
-counts <- as.integer(table(truncated_sim_tracts$bin))
+bins <- sort(unique(sim_tracts$bin))
+
+counts <- c(rep(NA, n_truncated), as.integer(table(truncated_sim_tracts$bin)))
 props <- counts / sum(counts)
 
 plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
 ```
 
 ```{r}
-fit <- MASS::fitdistr(truncated_sim_tracts$length, "exponential")
+r <- 1e-8
 
-average_bins <- aggregate(length ~ bin, data = truncated_sim_tracts, FUN = mean)
-
-# compute the difference between bins to get "average bin step size"
-(bin_step <- mean(diff(average_bins$length)))
+fit_trunc_fitdistr <- MASS::fitdistr(truncated_sim_tracts$length, "exponential")
 
 plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
 
-lambda <- fit$estimate["rate"]
-y <- dexp(bins, rate = lambda * bin_step)
-lines(bins, y * sum(counts), col = "red", lty = 2)
+lambda_trunc_fitdirstr <- fit_trunc_fitdistr$estimate["rate"]
+y_trunc_fitdistr <- dexp(bins, rate = lambda_trunc_fitdirstr * bin_step)
+lines(bins, y_trunc_fitdistr * sum(counts, na.rm = TRUE), col = "orange", lty = 2)
 
-t <- 1 / (r * 1 / lambda)
+t <- 1 / (r * 1 / lambda_trunc_fitdirstr)
 cat("Result from fitdistr: ", t, "\n")
 ```
 
-
-
 ```{r}
-hist_all <- hist(sim_tracts$length, breaks = seq(0, 500e3, by = 10e3), plot = FALSE)
-hist_trunc <- hist(truncated_sim_tracts$length, breaks = seq(0, 500e3, by = 10e3), plot = FALSE)
-hist_trunc2 <- hist(truncated_sim_tracts$length + min(truncated_sim_tracts$length), breaks = seq(0, 500e3, by = 10e3), plot = FALSE)
+r <- 1e-8
 
-plot(hist_all$mids, hist_all$counts, col = "black")
-points(hist_trunc$mids, hist_trunc$counts, col = "blue", pch = 14)
-
-plot(hist_all$mids, hist_all$counts, col = "black")
-points(hist_trunc2$mids, hist_trunc2$counts, col = "green", pch = 22)
-```
-
-```{r}
 plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
-y <- dexp(bins, rate = rate * bin_step)
-lines(bins, y * sum(counts), col = "red", lty = 2)
+
+fit_trunc_nls <- nls(counts ~ SSasymp(bins, Asym, R0, lrc))
+summary(fit_trunc_nls)
+lines(bins[-(1:n_truncated)], predict(fit_trunc_nls), col = "blue")
+
+fit_trunc_nls2 <- nls(counts ~ SSasymp(bins, Asym, R0, lrc), weights = sqrt(1 / bins))
+summary(fit_trunc_nls2)
+lines(bins[-(1:n_truncated)], predict(fit_trunc_nls2), col = "green")
+
+lines(bins, predict(fit_nls), col = "red")
+
+# https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp
+# https://stats.stackexchange.com/questions/318971/fitting-exponential-decay-with-negative-y-values
+lambda_trunc_nls <- exp(coef(fit_trunc_nls)["lrc"])
+y_trunc_nls <- dexp(bins[-(1:n_truncated)], rate = lambda_trunc_nls)
+lines(bins[-(1:n_truncated)], y_trunc_nls * sum(counts, na.rm = TRUE), col = "blue", lty = 2)
+
+t <- 1 / (bin_step * r * 1 / lambda_trunc_nls)
+cat("Result from nls: ", t, "\n")
+
+lambda_trunc_nls2 <- exp(coef(fit_trunc_nls2)["lrc"])
+y_trunc_nls2 <- dexp(bins[-(1:n_truncated)], rate = lambda_trunc_nls2)
+lines(bins[-(1:n_truncated)], y_trunc_nls2 * sum(counts, na.rm = TRUE), col = "green", lty = 2)
+
+t <- 1 / (bin_step * r * 1 / lambda_trunc_nls2)
+cat("Result from nls: ", t, "\n")
 ```
 
 ```{r}
-fit <- nls(y ~ exp(-lambda * x), data = data, start = list(lambda = 0.1))
+ssasymp_function <- function(x, Asym, R0, lrc) {
+  Asym + (R0 - Asym) * exp(-exp(lrc) * x)
+}
 
-# Get the summary of the fit to see the estimated parameters
-summary(fit)
+params <- coef(fit_trunc_nls2)
+Asym <- params["Asym"]
+R0 <- params["R0"]
+lrc <- params["lrc"]
 
-# Extract the coefficients
-coefficients <- coef(fit)
-a <- coefficients["a"]
-b <- coefficients["b"]
+ssasymp_predictions <- ssasymp_function(bins, Asym, R0, lrc)
 
-curve(a * exp(-b * x), add = TRUE, col = "blue", lwd = 2)
+lambda <- exp(lrc)
+
+# Generate exponential predictions
+exponential_predictions <- dexp(bins, rate = lambda)
+
+# Scale exponential predictions to match counts
+scale_factor <- sum(counts, na.rm = TRUE) / sum(exponential_predictions)
+scaled_exponential_predictions <- exponential_predictions * scale_factor
+
+plot(bins, counts, main = "Model Comparison", xlab = "Bins", ylab = "Counts", pch = 19, ylim = c(0, 1000))
+lines(bins, ssasymp_predictions, col = "blue", lwd = 2, type = "l", lty = 1)  # SSasymp predictions
+lines(bins[!is.na(counts)], predict(fit_trunc_nls2), col = "green", ltye = 2)
+lines(bins, scaled_exponential_predictions, col = "red", lwd = 2, type = "l", lty = 2)  # Exponential predictions
+
+lines(bins, predict(fit_nls), col = "orange")
+lines(bins, y_fitdistr * sum(counts), col = "orange")
+
+legend("topright", legend = c("SSasymp Predictions", "Exponential Predictions", "non-truncated fit"),
+       col = c("blue", "red", "orange"), lty = 1:2)
+
+# custom ssasymp_function and predict() on a nls object are the same
+ssasymp_predictions[-1] - predict(fit_trunc_nls2)
 ```
 
 
