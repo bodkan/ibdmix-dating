@@ -35,7 +35,7 @@ source(here::here("utils.R"))
 ```
 
 ```{r}
-# IBDmix desert coordinates from Table S8 of Chan et al., 202 ---------------------------------
+# IBDmix desert coordinates from Table S8 of Chan et al., 202
 # (https://ars.els-cdn.com/content/image/1-s2.0-S0092867420300593-mmc1.pdf)
 # (https://ars.els-cdn.com/content/image/1-s2.0-S0092867420300593-figs4_lrg.jpg)
 
@@ -47,11 +47,18 @@ deserts_df <- tribble(
   "chr8", 53900000,  66000000,  49400000,      66500000
 ) %>% pivot_longer(cols = c(starts_with("start_"), starts_with("end_")),
                    names_to = c(".value", "method"), names_sep = "_")
+
+# convert S* and IBDmix coordinates above into GRanges objects
+ss_deserts_gr <- filter(deserts_df, method == "ss") %>% makeGRangesFromDataFrame()
+ibdmix_deserts_gr <- filter(deserts_df, method == "ibdmix") %>% makeGRangesFromDataFrame()
+
+# get intersect of Neanderthal-only deserts inferred by both methods
+deserts_gr <- pintersect(ss_deserts_gr, ibdmix_deserts_gr)
 ```
 
 ```{r}
-# combined Neanderthal and Denisovan deserts
-# (https://www.science.org/doi/suppl/10.1126/science.aad9416/suppl_file/vernot-sm.pdf)
+# combined Neanderthal and Denisovan deserts -- Table S9 on page 51 of
+# https://www.science.org/doi/suppl/10.1126/science.aad9416/suppl_file/vernot-sm.pdf
 ss2_deserts_gr <- tribble(
   ~chrom, ~start, ~end,
   "chr1", 104000000, 114900000,
@@ -59,35 +66,37 @@ ss2_deserts_gr <- tribble(
   "chr7", 113600000, 124700000,
   "chr8", 54500000, 65400000
 ) %>% makeGRangesFromDataFrame()
+
+# get intersect of S* Neanderthal AND Denisovan deserts and IBDmix Neanderthal deserts
+deserts2_gr <- pintersect(ss2_deserts_gr, ibdmix_deserts_gr)
 ```
 
 ```{r}
-ss_deserts_gr <- filter(deserts_df, method == "ss") %>% makeGRangesFromDataFrame()
-ibdmix_deserts_gr <- filter(deserts_df, method == "ibdmix") %>% makeGRangesFromDataFrame()
-deserts_gr <- pintersect(ss_deserts_gr, ibdmix_deserts_gr)
-deserts2_gr <- pintersect(ss2_deserts_gr, ibdmix_deserts_gr)
-
 ss_deserts_gr$width <- width(ss_deserts_gr) / 1e6
-ss2_deserts_gr$width <- width(ss2_deserts_gr) / 1e6
 ibdmix_deserts_gr$width <- width(ibdmix_deserts_gr) / 1e6
 deserts_gr$width <- width(deserts_gr) / 1e6
+
+ss2_deserts_gr$width <- width(ss2_deserts_gr) / 1e6
 deserts2_gr$width <- width(deserts2_gr) / 1e6
 ```
 
 ```{r}
 ss_deserts_gr
-ss2_deserts_gr
 ibdmix_deserts_gr
 deserts_gr
+
+ss2_deserts_gr
 deserts2_gr
 ```
 
+In the visualizations below, we will define archaic deserts as the intersection of Neanderthal deserts obtained from S* and Neanderthal deserts obtained by IBDmix:
+
 ```{r}
-deserts_gr <- deserts2_gr
+# deserts_gr <- deserts2_gr
+
 desert_coords <- deserts_gr %>% as.data.frame() %>% select(chrom = seqnames, start, end)
 desert_coords
 ```
-
 
 ## Load and inspect GeoGenetics metadata
 
@@ -219,7 +228,7 @@ gaps_gr %>%
 ### Analyse tracts in windows
 
 ```{r}
-windows_gr <- generate_windows(gaps_gr, window_size = 200e3, step_size = 50e3)
+windows_gr <- generate_windows(gaps_gr, window_size = 100e3, step_size = 50e3)
 # windows_gr <- filter(windows_gr, seqnames == "chr7")
 
 # mark windows falling within archaic deserts
@@ -236,14 +245,27 @@ ancestry_gr$ancient <- ancestry_ancient_gr$coverage
 ancestry_gr
 ```
 
-```{r}
-filter(ancestry_gr, within_desert) %>% as_tibble() %>%
-  group_by(seqnames) %>%
-  summarise(mean(ancient), mean(modern))
-```
+Average Neanderthal ancestry proportion across all windows in ancient and present-day individuals:
 
 ```{r}
-ancestry_gr %>% as_tibble() %>% summarise(mean(ancient), mean(modern))
+ancestry_gr %>%
+  as_tibble() %>%
+  summarise(
+    neand_ancient = mean(ancient, na.rm = TRUE),
+    neand_modern = mean(modern, na.rm = TRUE)
+  )
+```
+
+Average Neanderthal ancestry proportion across all windows in ancient and present-day individuals **within desert regions**:
+
+```{r}
+filter(ancestry_gr, within_desert) %>%
+  as_tibble() %>%
+  group_by(seqnames) %>%
+  summarise(
+    desert_ancient = mean(ancient, na.rm = TRUE),
+    desert_modern = mean(modern, na.rm = TRUE)
+  )
 ```
 
 ```{r}
@@ -263,34 +285,32 @@ ancestry_gr %>%
 ```
 
 ```{r}
-ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 100 } %>% summary()
-```
-
-```{r}
 pdf("deserts_comparison.pdf", width = 12, height = 8)
 
 for (chrom in as.character(unique(seqnames(deserts_gr)))) {
   p1 <- plot_desert_ancestry(ancestry_gr, deserts_gr, chrom)
   p2 <- plot_desert_correlation(ancestry_gr, chrom)
   
-  print(cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7)))
+  suppressWarnings(print(cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 1))))
 }
 
 dev.off()
 ```
 
-```{r}
+```{r, fig.width=12, fig.height=8}
 p1 <- plot_desert_ancestry(ancestry_gr, deserts_gr, "chr7")
 p2 <- plot_desert_correlation(ancestry_gr, "chr7")
 
-cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
+cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 1))
 ```
 
-## Comparison of tracts between ancient and present-day humans
+## A couple of diagnostics and sanity checks
+
+### Comparison of tracts between ancient and present-day humans
 
 ```{r}
 tracts_df <- select(metadata, sampleId, ageAverage) %>% inner_join(tracts, by = c("sampleId" = "ID"))
-tracts_df$width <- tracts_df$end - tracts_df$start
+tracts_df$length <- tracts_df$end - tracts_df$start
 tracts_df$ageAverage <- ifelse(is.na(tracts_df$ageAverage), 0, tracts_df$ageAverage)
 
 tracts_df$age_group <- cut(
@@ -308,27 +328,185 @@ tracts_df <- tracts_df %>%
   )
 ```
 
+### Sanity checks of my filtering against Alba's Figure 2. B/C
+
 ```{r}
 group_by(tracts_df, age_group) %>%
-  summarise(mean(width), min(width), max(width))
+  summarise(mean(length), min(length), max(length))
 ```
 
 ```{r}
 ggplot(tracts_df) +
-  geom_density(aes(width, color = age_group)) +
+  geom_density(aes(length, color = age_group)) +
   scale_x_log10()
 ```
 
 ```{r}
 ggplot(tracts_df) +
-  geom_boxplot(aes(age_group, width, color = age_group))
+  geom_boxplot(aes(age_group, length, color = age_group)) +
+  geom_hline(yintercept = c(50e3, 250e3), linetype = "dashed")
 ```
 
 ```{r}
 ggplot(tracts_df) +
-  geom_boxplot(aes(age_group, width, color = age_group)) +
+  geom_boxplot(aes(age_group, length, color = age_group)) +
+  geom_hline(yintercept = c(50e3, 250e3), linetype = "dashed") +
   coord_cartesian(ylim = c(50e3, 250e3)) 
 ```
+
+## Fitting exponential decay to simulated tracts
+
+### Complete (unfiltered) tract distribution
+
+```{r}
+sim_tracts <- read.table(url("https://github.com/bodkan/ku-introgression2024/raw/main/tracts.tsv"), sep = "\t", header = TRUE)
+
+# get the bin numbers
+bins <- sort(unique(sim_tracts$bin))
+
+# count the tracts in each bin and compute the proportion of tracts in each bin
+counts <- as.integer(table(sim_tracts$bin))
+props <- counts / sum(counts)
+
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+```
+
+```{r}
+r <- 1e-8
+
+fit <- MASS::fitdistr(sim_tracts$length, "exponential")
+
+average_bins <- aggregate(length ~ bin, data = sim_tracts, FUN = mean)
+
+# compute the difference between bins to get "average bin step size"
+(bin_step <- mean(diff(average_bins$length)))
+
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+
+lambda <- fit$estimate["rate"]
+y <- dexp(bins, rate = lambda * bin_step)
+lines(bins, y * sum(counts), col = "red", lty = 2)
+
+t <- 1 / (r * 1 / lambda)
+cat("Result from fitdistr: ", t, "\n")
+
+lambda <- 1 / mean(sim_tracts$length)
+y <- dexp(bins, rate = lambda * bin_step)
+lines(bins, y * sum(counts), col = "green", lty = 2)
+
+t <- 1 / (r * 1 / lambda)
+cat("Result from simple equation: ", t, "\n")
+```
+
+
+
+### Filtered tracts (truncating the shortest tracts)
+
+```{r}
+truncated_sim_tracts <- sim_tracts %>% filter(bin >= 6)
+
+bins <- sort(unique(truncated_sim_tracts$bin))
+
+counts <- as.integer(table(truncated_sim_tracts$bin))
+props <- counts / sum(counts)
+
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+```
+
+```{r}
+fit <- MASS::fitdistr(truncated_sim_tracts$length, "exponential")
+
+average_bins <- aggregate(length ~ bin, data = truncated_sim_tracts, FUN = mean)
+
+# compute the difference between bins to get "average bin step size"
+(bin_step <- mean(diff(average_bins$length)))
+
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+
+lambda <- fit$estimate["rate"]
+y <- dexp(bins, rate = lambda * bin_step)
+lines(bins, y * sum(counts), col = "red", lty = 2)
+
+t <- 1 / (r * 1 / lambda)
+cat("Result from fitdistr: ", t, "\n")
+```
+
+
+
+```{r}
+hist_all <- hist(sim_tracts$length, breaks = seq(0, 500e3, by = 10e3), plot = FALSE)
+hist_trunc <- hist(truncated_sim_tracts$length, breaks = seq(0, 500e3, by = 10e3), plot = FALSE)
+hist_trunc2 <- hist(truncated_sim_tracts$length + min(truncated_sim_tracts$length), breaks = seq(0, 500e3, by = 10e3), plot = FALSE)
+
+plot(hist_all$mids, hist_all$counts, col = "black")
+points(hist_trunc$mids, hist_trunc$counts, col = "blue", pch = 14)
+
+plot(hist_all$mids, hist_all$counts, col = "black")
+points(hist_trunc2$mids, hist_trunc2$counts, col = "green", pch = 22)
+```
+
+```{r}
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+y <- dexp(bins, rate = rate * bin_step)
+lines(bins, y * sum(counts), col = "red", lty = 2)
+```
+
+```{r}
+fit <- nls(y ~ exp(-lambda * x), data = data, start = list(lambda = 0.1))
+
+# Get the summary of the fit to see the estimated parameters
+summary(fit)
+
+# Extract the coefficients
+coefficients <- coef(fit)
+a <- coefficients["a"]
+b <- coefficients["b"]
+
+curve(a * exp(-b * x), add = TRUE, col = "blue", lwd = 2)
+```
+
+
+## Fitting exponential decay to empirical tracts
+
+```{r}
+bin_step <- 10e3
+
+tract_bins <- tracts_df %>%
+  filter(set == "Modern") %>%
+  # mutate(bin = cut(width, breaks = tracts_sim$max, labels = FALSE, include.lowest = TRUE)) %>%
+  mutate(bin = cut(length, breaks = seq(1, max(length) + bin_step, by = bin_step - 1), labels = FALSE, include.lowest = TRUE))
+
+tract_bins %>%
+  group_by(bin) %>%
+  summarise(min(length), max(length), mean(length), n())
+```
+
+```{r}
+bins <- sort(unique(tract_bins$bin))
+
+counts <- as.integer(table(tract_bins$bin))
+props <- counts / sum(counts)
+
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50))
+```
+
+```{r}
+fit <- MASS::fitdistr(tract_bins$length - min(tract_bins$length), "exponential")
+
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50))
+
+# lambda <- r * fit$estimate * bin_step
+rate <- unname(fit$estimate["rate"])
+y <- dexp(seq(1, max(bins)), rate = rate * bin_step)
+lines(bins + 5, y[bins] * sum(counts), col = "red", lty = 2)
+
+r <- 1e-8
+lambda <- 1 / rate
+t <- 1 / (r * lambda)
+t
+```
+
+
 
 
 ## Chen _et al._ tracts
@@ -341,10 +519,7 @@ chen_tracts <- read_tsv("data/Chen et al. - Neanderthal sequence in 1000 genome.
 ```
 
 ```{r}
-all_tracts <- tracts %>%
-  filter(set == "Modern") %>%
-  bind_rows(chen_tracts) %>% 
-  filter(chrom == "chr1")
+all_tracts <- bind_rows(tracts, chen_tracts)
 ```
 
 ```{r}
@@ -355,11 +530,12 @@ group_by(all_tracts, set) %>% tally()
 
 ```{r}
 all_tracts %>%
+filter(set != "Ancient", chrom %in% as.character(unique(seqnames(deserts_gr)))) %>%
 ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
   geom_segment(linewidth = 1) +
-  geom_rect(data = filter(desert_coords, chrom == "chr1"), aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
-  geom_vline(data = filter(desert_coords, chrom == "chr1"), aes(xintercept = start), linetype = "dashed", color = "red") +
-  geom_vline(data = filter(desert_coords, chrom == "chr1"), aes(xintercept = end), linetype = "dashed", color = "red") +
+  geom_rect(data = desert_coords, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
+  geom_vline(data = desert_coords, aes(xintercept = start), linetype = "dashed", color = "red") +
+  geom_vline(data = desert_coords, aes(xintercept = end), linetype = "dashed", color = "red") +
   labs(x = "position along a chromosome [bp]", y = "each row = tracts in an individual") +
   theme_bw() +
   theme(
@@ -393,6 +569,25 @@ ancestry_gr
 ```
 
 ```{r}
+saveRDS(ancestry_gr, "ancestry_gr.rds")
+```
+
+```{r}
+ancestry_gr <- readRDS("ancestry_gr.rds")
+```
+
+```{r, fig.width=12, fig.height=8}
+plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr1")
+```
+
+```{r, fig.width=12, fig.height=8}
+plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr3")
+```
+
+```{r, fig.width=12, fig.height=8}
 plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr7")
 ```
 
+```{r, fig.width=12, fig.height=8}
+plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr8")
+```
