@@ -79,43 +79,56 @@ compute_ancestry <- function(tracts_gr, windows_gr) {
     })
 
     mcols(chrom_gr)$coverage <- average_coverage_per_window
+    mcols(chrom_gr)$coverage[mcols(chrom_gr)$gap] <- NA
 
     chrom_gr
   }, mc.cores = detectCores())
 
   ancestry_grl <- GRangesList(ancestry_list)
 
+
   unlist(ancestry_grl)
 }
 
-plot_desert_ancestry <- function(ancestry_gr, deserts_gr, chrom) {
+plot_desert_ancestry <- function(ancestry_gr, deserts_gr, chrom, full = FALSE) {
   desert_df <- deserts_gr %>% filter(seqnames == chrom) %>% as_tibble
 
   ancestry_df <- as_tibble(ancestry_gr) %>%
     filter(seqnames == chrom) %>%
     select(chrom = seqnames, start, end, ancient, modern, gap, midpoint)
 
+  if (!full) {
+    ancestry_df <- ancestry_df %>%
+      filter(start >= (desert_df$start * 0.9) & end <= (desert_df$end * 1.1))
+  }
+
   ancestry_df %>%
-    filter(start >= (desert_df$start * 0.9) & end <= (desert_df$end * 1.1)) %>%
     {
       ggplot(data = .) +
-        geom_rect(data = desert_df, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
-        geom_line(aes(midpoint, ancient), color = "orange") +
+        geom_rect(data = desert_df, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.05) +
+
+        geom_line(aes(midpoint, ancient), color = "blue") +
         geom_point(data = filter(., ancient > 0), aes(midpoint, ancient, color = "ancient individuals"), size = 0.8) +
-        geom_line(aes(midpoint, modern), color = "blue") +
+
+        geom_line(aes(midpoint, modern), color = "orange") +
         geom_point(data = filter(., modern > 0), aes(midpoint, modern, color = "present-day individuals"), size = 0.8) +
+
         geom_vline(data = desert_df, aes(xintercept = start, linetype = "desert boundary"), color = "red") +
         geom_vline(data = desert_df, aes(xintercept = end, linetype = "desert boundary"), color = "red") +
-        scale_color_manual(values = c("orange", "blue")) +
+
+        geom_hline(yintercept = mean(.$ancient, na.rm = TRUE), color = "blue", linetype = "dashed", alpha = 0.5) +
+        geom_hline(yintercept = mean(.$modern, na.rm = TRUE), color = "orange", linetype = "dashed", alpha = 0.5) +
+
+        scale_color_manual(values = c("blue", "orange")) +
         guides(color = guide_legend("", override.aes = list(size = 5)),
                linetype = guide_legend("")) +
         labs(x = "genomic coordinate [bp]", y = "proportion of Neanderthal ancestry") +
         scale_x_continuous(labels = scales::comma) +
         scale_y_continuous(labels = scales::percent_format(accuracy = 0.01)) +
-        coord_cartesian(ylim = c(0, 0.1)) +
+        coord_cartesian(ylim = c(0, 0.5)) +
         scale_linetype_manual(values = "dashed") +
         theme_minimal() +
-        theme(legend.position = "bottom") +
+        theme(legend.position = "bottom", text = element_text(size = 13)) +
         ggtitle(paste("Archaic ancestry desert on chromosome", gsub("chr", "", .$chrom[1])))
     }
 
@@ -124,25 +137,33 @@ plot_desert_ancestry <- function(ancestry_gr, deserts_gr, chrom) {
 plot_desert_correlation <- function(ancestry_gr, chrom) {
   ancestry_df <- as_tibble(ancestry_gr) %>% filter(seqnames == chrom)
 
+  rho <- ancestry_gr %>% filter(within_desert, seqnames == chrom) %>% { cor(.$modern, .$ancient) }
+
   ggplot() +
-    geom_smooth(data = filter(ancestry_df, within_desert, ancient > 0, modern > 0), aes(ancient, modern, color = within_desert),
-                color = "red", fill = "black", method = "lm", linetype = "dashed", linewidth = 0.8, alpha = 0.35) +
-    geom_point(data = filter(ancestry_df, !within_desert, ancient > 0, modern > 0), aes(ancient, modern, color = desert, shape = "outside desert"),
+    geom_smooth(data = filter(ancestry_df, within_desert, ancient > 0, modern > 0), aes(modern, ancient, color = within_desert),
+                formula = y ~ x, color = "red", fill = "black", method = "lm", linetype = "dashed", linewidth = 0.8, alpha = 0.35) +
+
+    geom_point(data = filter(ancestry_df, !within_desert, ancient > 0, modern > 0), aes(modern, ancient, color = desert, shape = "outside desert"),
                color = "lightgray", alpha = 0.5) +
-    geom_point(data = filter(ancestry_df, within_desert, ancient > 0, modern > 0), aes(ancient, modern, color = within_desert, shape = "within desert"), color = "black") +
+    geom_point(data = filter(ancestry_df, within_desert, ancient > 0, modern > 0), aes(modern, ancient, color = within_desert, shape = "within desert"), color = "black") +
+
     geom_abline(slope = 1, linetype = "dashed") +
-    geom_hline(aes(color = "modern", yintercept = mean(ancestry_df$modern)), linetype = "dashed", color = "blue") +
-    geom_vline(aes(color = "ancient", xintercept = mean(ancestry_df$ancient)), linetype = "dashed", color = "orange") +
-    scale_x_log10(breaks = c(0.0001, mean(ancestry_df$ancient), 1), labels = scales::percent_format(accuracy = 0.01), limits = c(0.00001, 1)) +
-    scale_y_log10(breaks = c(0.0001, mean(ancestry_df$modern), 1), labels = scales::percent_format(accuracy = 0.01), limits = c(0.00001, 1)) +
-    labs(x = "Neanderthal ancestry proportion\nin ancient Eurasians [log scale]",
-         y = "Neanderthal ancestry proportion\nin present-day Eurasians [log scale]") +
+
+    geom_vline(aes(color = "modern", xintercept = mean(ancestry_df$modern, na.rm = TRUE)), linetype = "dashed", color = "blue") +
+    geom_hline(aes(color = "ancient", yintercept = mean(ancestry_df$ancient, na.rm = TRUE)), linetype = "dashed", color = "orange") +
+
+    scale_x_log10(breaks = c(0.0001, mean(ancestry_df$modern, na.rm = TRUE), 1), labels = scales::percent_format(accuracy = 0.01), limits = c(0.00001, 1)) +
+    scale_y_log10(breaks = c(0.0001, mean(ancestry_df$ancient, na.rm = TRUE), 1), labels = scales::percent_format(accuracy = 0.01), limits = c(0.00001, 1)) +
+    labs(x = "Neanderthal ancestry proportion\nin present-day Eurasians [log scale]",
+         y = "Neanderthal ancestry proportion\nin ancient Eurasians [log scale]") +
     coord_fixed() +
     theme_minimal() +
-    theme(legend.position = "bottom") +
+    theme(legend.position = "bottom", text = element_text(size = 13)) +
     guides(shape = guide_legend("window", override.aes = list(alpha = 1, size = 3)),
            linetype = "none") +
-    scale_shape_manual(values = c(4, 20))
+    scale_shape_manual(values = c(4, 20)) +
+    ggtitle("", subtitle = paste0("Pearson correlation within desert = ",
+                                  formatC(rho, format = "f", digits = 3)))
 }
 
 plot_desert_ancestry2 <- function(ancestry_gr, deserts_gr, chrom) {
@@ -166,6 +187,9 @@ plot_desert_ancestry2 <- function(ancestry_gr, deserts_gr, chrom) {
 
         geom_vline(data = desert_df, aes(xintercept = start, linetype = "desert boundary"), color = "red") +
         geom_vline(data = desert_df, aes(xintercept = end, linetype = "desert boundary"), color = "red") +
+
+        geom_hline(yintercept = mean(.$chen), color = "orange", linetype = "dashed", alpha = 0.5) +
+        geom_hline(yintercept = mean(.$modern), color = "blue", linetype = "dashed", alpha = 0.5) +
 
         scale_color_manual(values = c("orange", "blue")) +
         guides(color = guide_legend("", override.aes = list(size = 5)), linetype = guide_legend("")) +
