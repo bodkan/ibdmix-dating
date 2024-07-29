@@ -13,7 +13,10 @@ read_metadata <- function() {
   info <-
     raw_info %>%
     filter(region %in% c("SouthernEurope", "WesternEurope", "WesternAsia", "NorthernEurope", "CentralEasternEurope"),
-           country != "Greenland")
+           country != "Greenland") %>%
+    filter(groupAge != "Archaic") %>%
+    mutate(ageAverage = ifelse(groupAge == "Modern", 0, ageAverage)) %>%
+    mutate(coverage = ifelse(groupAge == "Modern", Inf, coverage))
 
   info
 }

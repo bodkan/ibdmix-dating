@@ -140,7 +140,6 @@ Looks like `ageAverage` has a value for every individual:
 
 ```{r}
 metadata %>%
-  filter(groupAge == "Ancient") %>%
   ggplot() +
   geom_histogram(aes(ageAverage))
 ```
@@ -161,7 +160,8 @@ tracts %>%
 filter(chrom %in% as.character(seqnames(deserts_gr))) %>%
 ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
   geom_segment(linewidth = 1) +
-  geom_rect(data = desert_coords, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
+  geom_rect(data = desert_coords, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf),
+            inherit.aes = FALSE, fill = "red", alpha = 0.1) +
   geom_vline(data = desert_coords, aes(xintercept = start), linetype = "dashed", color = "red") +
   geom_vline(data = desert_coords, aes(xintercept = end), linetype = "dashed", color = "red") +
   labs(x = "position along a chromosome [bp]", y = "each row = tracts in an individual") +
@@ -309,7 +309,7 @@ cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 1))
 ### Comparison of tracts between ancient and present-day humans
 
 ```{r}
-tracts_df <- select(metadata, sampleId, ageAverage) %>% inner_join(tracts, by = c("sampleId" = "ID"))
+tracts_df <- select(metadata, sampleId, ageAverage, coverage) %>% inner_join(tracts, by = c("sampleId" = "ID"))
 tracts_df$length <- tracts_df$end - tracts_df$start
 tracts_df$ageAverage <- ifelse(is.na(tracts_df$ageAverage), 0, tracts_df$ageAverage)
 
@@ -331,8 +331,7 @@ tracts_df <- tracts_df %>%
 ### Sanity checks of my filtering against Alba's Figure 2. B/C
 
 ```{r}
-group_by(tracts_df, age_group) %>%
-  summarise(mean(length), min(length), max(length))
+tapply(tracts_df$length, tracts_df$age_group, summary)
 ```
 
 ```{r}
@@ -359,7 +358,10 @@ ggplot(tracts_df) +
 ### Complete (unfiltered) tract distribution
 
 ```{r}
-sim_tracts <- read.table(url("https://github.com/bodkan/ku-introgression2024/raw/main/tracts.tsv"), sep = "\t", header = TRUE)
+sim_tracts <- read.table(url("https://github.com/bodkan/ku-introgression2024/raw/main/tracts.tsv"), sep = "\t", header = TRUE) %>% as_tibble()
+# bin_step <- 10e3
+# sim_tracts$bin <- cut(sim_tracts$length, breaks = seq(1, 1e6, by = bin_step - 1), labels = FALSE, include.lowest = TRUE)
+# sim_tracts$bin <- cut(sim_tracts$length, breaks = 50, labels = FALSE, include.lowest = TRUE)
 
 average_bins <- aggregate(length ~ bin, data = sim_tracts, FUN = mean)
 (bin_step <- mean(diff(average_bins$length)))
@@ -371,7 +373,7 @@ bins <- sort(unique(sim_tracts$bin))
 counts <- as.integer(table(sim_tracts$bin))
 props <- counts / sum(counts)
 
-plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", xlim = c(1, 50), ylim = c(0, 1000))
 ```
 
 ```{r}
@@ -379,43 +381,43 @@ r <- 1e-8
 
 fit_fitdistr <- MASS::fitdistr(sim_tracts$length, "exponential")
 
-plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+# plot(bins, props, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", xlim = c(1, 50), ylim = c(0, 1000))
 
-lambda_fitdistr <- fit_fitdistr$estimate["rate"]
+lambda_fitdistr <- unname(fit_fitdistr$estimate["rate"])
 y_fitdistr <- dexp(bins, rate = lambda_fitdistr * bin_step)
 lines(bins, y_fitdistr * sum(counts), col = "red", lty = 2)
 
 t <- 1 / (r * 1 / lambda_fitdistr)
-cat("Result from fitdistr: ", t, "\n")
+cat("Time of admixture from fitdistr:\n  ", t, "generations\n  ", t * 26.9, "years\n")
 
 lambda_mean <- 1 / mean(sim_tracts$length)
 y_mean <- dexp(bins, rate = lambda_mean * bin_step)
 lines(bins, y_mean * sum(counts), col = "green", lty = 2)
 
 t <- 1 / (r * 1 / lambda_mean)
-cat("Result from simple equation: ", t, "\n")
+cat("Time of admixture from a simple equation:\n  ", t, "generations\n  ", t * 26.9, "years\n")
 ```
 
 ```{r}
 r <- 1e-8
 
-plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", xlim = c(1, 50), ylim = c(0, 1000))
 
 fit_nls <- nls(counts ~ SSasymp(bins, Asym, R0, lrc))
 summary(fit_nls)
 
 # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp
-lambda_nls <- exp(coef(fit_nls)["lrc"])
+lambda_nls <- exp(unname(coef(fit_nls)["lrc"]))
 y_nls <- dexp(bins, rate = lambda_nls)
 lines(bins, y_nls * sum(counts), col = "red")
 
 t <- 1 / (bin_step * r * 1 / lambda_nls)
-cat("Result from nls: ", t, "\n")
+cat("Time of admixture from nls:\n  ", t, "generations\n  ", t * 26.9, "years\n")
 
 lines(bins, y_mean * sum(counts), col = "green", lty = 2)
 
 t <- 1 / (r * 1 / lambda_mean)
-cat("Result from simple equation: ", t, "\n")
+cat("Time of admixture from a simple equation:\n  ", t, "generations\n  ", t * 26.9, "years\n")
 ```
 
 
@@ -426,107 +428,68 @@ n_truncated <- 1
 
 truncated_sim_tracts <- sim_tracts %>% filter(bin > n_truncated)
 
-bins <- sort(unique(sim_tracts$bin))
+# average_bins <- aggregate(length ~ bin, data = truncated_sim_tracts, FUN = mean)
+# (bin_step <- mean(diff(average_bins$length)))
+
+bins <- sort(unique(truncated_sim_tracts$bin))
+bins <- c(rep(NA, n_truncated), bins)
 
 counts <- c(rep(NA, n_truncated), as.integer(table(truncated_sim_tracts$bin)))
-props <- counts / sum(counts)
+props <- counts / sum(counts, na.rm = TRUE)
 
-plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+# plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", xlim = c(1, 50), ylim = c(0, 1000))
 ```
 
 ```{r}
 r <- 1e-8
 
-fit_trunc_fitdistr <- MASS::fitdistr(truncated_sim_tracts$length, "exponential")
+plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", xlim = c(1, 50), ylim = c(0, 1000))
 
-plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
-
-lambda_trunc_fitdirstr <- fit_trunc_fitdistr$estimate["rate"]
-y_trunc_fitdistr <- dexp(bins, rate = lambda_trunc_fitdirstr * bin_step)
-lines(bins, y_trunc_fitdistr * sum(counts, na.rm = TRUE), col = "orange", lty = 2)
-
-t <- 1 / (r * 1 / lambda_trunc_fitdirstr)
-cat("Result from fitdistr: ", t, "\n")
-```
-
-```{r}
-r <- 1e-8
-
-plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50), ylim = c(0, 1000))
+lines(bins, predict(fit_nls), col = "red")
 
 fit_trunc_nls <- nls(counts ~ SSasymp(bins, Asym, R0, lrc))
 summary(fit_trunc_nls)
-lines(bins[-(1:n_truncated)], predict(fit_trunc_nls), col = "blue")
+lines(bins[!is.na(counts)], predict(fit_trunc_nls), col = "blue")
 
-fit_trunc_nls2 <- nls(counts ~ SSasymp(bins, Asym, R0, lrc), weights = sqrt(1 / bins))
+fit_trunc_nls2 <- nls(counts ~ SSasymp(bins, Asym, R0, lrc), weights = 1 / bins)
 summary(fit_trunc_nls2)
-lines(bins[-(1:n_truncated)], predict(fit_trunc_nls2), col = "green")
-
-lines(bins, predict(fit_nls), col = "red")
+lines(bins[!is.na(counts)], predict(fit_trunc_nls2), col = "green")
 
 # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp
 # https://stats.stackexchange.com/questions/318971/fitting-exponential-decay-with-negative-y-values
 lambda_trunc_nls <- exp(coef(fit_trunc_nls)["lrc"])
-y_trunc_nls <- dexp(bins[-(1:n_truncated)], rate = lambda_trunc_nls)
-lines(bins[-(1:n_truncated)], y_trunc_nls * sum(counts, na.rm = TRUE), col = "blue", lty = 2)
+# y_trunc_nls <- dexp(bins[!is.na(counts)], rate = lambda_trunc_nls)
+# lines(bins[!is.na(counts)], y_trunc_nls * sum(counts, na.rm = TRUE) + coef(fit_trunc_nls)["Asym"], col = "cyan", lty = 2)
 
 t <- 1 / (bin_step * r * 1 / lambda_trunc_nls)
 cat("Result from nls: ", t, "\n")
 
 lambda_trunc_nls2 <- exp(coef(fit_trunc_nls2)["lrc"])
-y_trunc_nls2 <- dexp(bins[-(1:n_truncated)], rate = lambda_trunc_nls2)
-lines(bins[-(1:n_truncated)], y_trunc_nls2 * sum(counts, na.rm = TRUE), col = "green", lty = 2)
+# y_trunc_nls2 <- dexp(bins[!is.na(counts)], rate = lambda_trunc_nls2)
+# lines(bins[!is.na(counts)], y_trunc_nls2 * sum(counts, na.rm = TRUE) + coef(fit_trunc_nls2)["Asym"], col = "green", lty = 2)
+
+legend("topright", fill = c("blue", "green", "red"), #, "cyan", "green"),
+       legend = c("truncated nls", "truncated nls (weighted)", "full nls fit")) #,
+                  # "truncated nls (dexp)", "truncated nls (weighted, dexp)"))
 
 t <- 1 / (bin_step * r * 1 / lambda_trunc_nls2)
-cat("Result from nls: ", t, "\n")
-```
-
-```{r}
-ssasymp_function <- function(x, Asym, R0, lrc) {
-  Asym + (R0 - Asym) * exp(-exp(lrc) * x)
-}
-
-params <- coef(fit_trunc_nls2)
-Asym <- params["Asym"]
-R0 <- params["R0"]
-lrc <- params["lrc"]
-
-ssasymp_predictions <- ssasymp_function(bins, Asym, R0, lrc)
-
-lambda <- exp(lrc)
-
-# Generate exponential predictions
-exponential_predictions <- dexp(bins, rate = lambda)
-
-# Scale exponential predictions to match counts
-scale_factor <- sum(counts, na.rm = TRUE) / sum(exponential_predictions)
-scaled_exponential_predictions <- exponential_predictions * scale_factor
-
-plot(bins, counts, main = "Model Comparison", xlab = "Bins", ylab = "Counts", pch = 19, ylim = c(0, 1000))
-lines(bins, ssasymp_predictions, col = "blue", lwd = 2, type = "l", lty = 1)  # SSasymp predictions
-lines(bins[!is.na(counts)], predict(fit_trunc_nls2), col = "green", ltye = 2)
-lines(bins, scaled_exponential_predictions, col = "red", lwd = 2, type = "l", lty = 2)  # Exponential predictions
-
-lines(bins, predict(fit_nls), col = "orange")
-lines(bins, y_fitdistr * sum(counts), col = "orange")
-
-legend("topright", legend = c("SSasymp Predictions", "Exponential Predictions", "non-truncated fit"),
-       col = c("blue", "red", "orange"), lty = 1:2)
-
-# custom ssasymp_function and predict() on a nls object are the same
-ssasymp_predictions[-1] - predict(fit_trunc_nls2)
+cat("Result from nls (weighted): ", t, "\n")
 ```
 
 
 ## Fitting exponential decay to empirical tracts
 
 ```{r}
-bin_step <- 10e3
+bin_step <- 25e3
 
 tract_bins <- tracts_df %>%
   filter(set == "Modern") %>%
-  # mutate(bin = cut(width, breaks = tracts_sim$max, labels = FALSE, include.lowest = TRUE)) %>%
-  mutate(bin = cut(length, breaks = seq(1, max(length) + bin_step, by = bin_step - 1), labels = FALSE, include.lowest = TRUE))
+  # filter(sampleId == "Kostenki") %>%
+  # filter(ageAverage < 10000) %>%
+  # filter(ageAverage == max(ageAverage)) %>%
+  # mutate(bin = cut(length, breaks = seq(1, max(length) + bin_step, by = bin_step - 1), labels = FALSE, include.lowest = TRUE)) %>%
+  mutate(bin = cut(length, breaks = seq(1, 1e6, by = bin_step - 1), labels = FALSE, include.lowest = TRUE)) %>%
+  filter(!is.na(bin))
 
 tract_bins %>%
   group_by(bin) %>%
@@ -534,28 +497,182 @@ tract_bins %>%
 ```
 
 ```{r}
+n_truncated <- min(tract_bins$bin) - 1
+
 bins <- sort(unique(tract_bins$bin))
+bins <- c(1:n_truncated, bins)
 
 counts <- as.integer(table(tract_bins$bin))
-props <- counts / sum(counts)
+counts <- c(rep(NA, n_truncated), counts)
 
-plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50))
+props <- counts / sum(counts, na.rm = TRUE)
+
+# plot(bins, props, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", log = "y")
+plot(bins, props, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", ylim = c(0, 0.3))
 ```
 
 ```{r}
-fit <- MASS::fitdistr(tract_bins$length - min(tract_bins$length), "exponential")
+r <- 1e-8
 
-plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "proportion of tracts", xlim = c(1, 50))
+# plot(bins, props, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", log = "y")
+plot(bins, props, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", ylim = c(0, 0.3))
 
-# lambda <- r * fit$estimate * bin_step
-rate <- unname(fit$estimate["rate"])
-y <- dexp(seq(1, max(bins)), rate = rate * bin_step)
-lines(bins + 5, y[bins] * sum(counts), col = "red", lty = 2)
+fit_trunc_nls2 <- nls(props ~ SSasymp(bins, Asym, R0, lrc), na.action = na.omit)
+summary(fit_trunc_nls2)
+lines(bins[!is.na(counts)], predict(fit_trunc_nls2), col = "green")
+
+# https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp
+# https://stats.stackexchange.com/questions/318971/fitting-exponential-decay-with-negative-y-values
+# lambda_trunc_nls2 <- exp(coef(fit_trunc_nls2)["lrc"])
+# y_trunc_nls2 <- dexp(bins[!is.na(counts)], rate = lambda_trunc_nls2)
+# y_trunc_nls2 <- y_trunc_nls2 * sum(counts, na.rm = TRUE) / sum(y_trunc_nls2) + coef(fit_trunc_nls2)["Asym"]
+# lines(bins[!is.na(counts)], y_trunc_nls2, col = "blue", lty = 2)
+
+# https://www.science.org/doi/10.1126/sciadv.abm7047#:~:text=Within%20this%20time%20frame%2C%20we,of%2023.2%20±%203.0%20years
+```
+
+```{r}
+lrc_est <- coef(fit_trunc_nls2)["lrc"] %>% unname()
+
+# Calculate the estimate of lambda
+lambda_est <- exp(lrc_est)
+
+# Extract the standard error of lrc
+lrc_se <- summary(fit_trunc_nls2)$parameters["lrc", "Std. Error"]
+
+# Use the delta method to approximate the standard error of lambda
+lambda_se <- lambda_est * lrc_se
+
+# Calculate the confidence interval for lambda
+alpha <- 0.05 # for a 95% confidence interval
+z <- qnorm(1 - alpha / 2)
+ci_lower <- lambda_est - z * lambda_se
+ci_upper <- lambda_est + z * lambda_se
+
+# Display the results
+lambda_est
+lambda_se
+ci_lower
+ci_upper
+
+t_est <- 1 / (bin_step * r * 1 / lambda_est)
+t_lower <- 1 / (bin_step * r * 1 / ci_lower)
+t_upper <- 1 / (bin_step * r * 1 / ci_upper)
+cat("Mean admixture time:", t_est, "generations,", t_est * 26.9, "years\n",
+ "Lower CI boundary:", t_lower, "generations,", t_lower * 26.9, "years\n",
+ "Upper CI boundary:", t_upper, "generations,", t_upper * 26.9, "years\n")
+```
+
+
+
+```{r}
+samples <- metadata %>%
+  mutate(t_admix = lapply(sampleId, function(x) {
+bin_step <- 25e3
+
+tract_bins <- tracts_df %>% filter(sampleId == x)
+
+if (!nrow(tract_bins)) return(list(t_admix = NA, t_admix_lower = NA, t_admix_upper = NA))
+
+tract_bins <- tract_bins %>% 
+  mutate(bin = cut(length, breaks = seq(1, 1e6, by = bin_step - 1), labels = FALSE, include.lowest = TRUE)) %>%
+  filter(!is.na(bin))
 
 r <- 1e-8
-lambda <- 1 / rate
-t <- 1 / (r * lambda)
-t
+n_truncated <- min(tract_bins$bin) - 1
+
+bins <- sort(unique(tract_bins$bin))
+bins <- c(1:n_truncated, bins)
+
+counts <- as.integer(table(tract_bins$bin))
+counts <- c(rep(NA, n_truncated), counts)
+
+fit_trunc_nls2 <- nls(counts ~ SSasymp(bins, Asym, R0, lrc), weights = bins)
+
+lrc_est <- coef(fit_trunc_nls2)["lrc"] %>% unname()
+lrc_se <- summary(fit_trunc_nls2)$parameters["lrc", "Std. Error"]
+
+lambda_est <- exp(lrc_est)
+lambda_se <- lambda_est * lrc_se
+
+alpha <- 0.05
+z <- qnorm(1 - alpha / 2)
+ci_lower <- lambda_est - z * lambda_se
+ci_upper <- lambda_est + z * lambda_se
+
+t_est <- 1 / (bin_step * r * 1 / lambda_est) * 26.9
+t_lower <- 1 / (bin_step * r * 1 / ci_lower) * 26.9
+t_upper <- 1 / (bin_step * r * 1 / ci_upper) * 26.9
+
+list(t_admix = t_est, t_admix_lower = t_lower, t_admix_upper = t_upper)
+  })) %>% tidyr::unnest_wider(t_admix)
+```
+
+```{r}
+samples %>%
+ggplot() +
+  geom_boxplot(aes(groupAge, t_admix)) +
+  geom_jitter(aes(groupAge, t_admix))
+```
+
+```{r}
+ggplot(samples) +
+  geom_pointrange(aes(sampleId, t_admix, ymin = t_admix_lower, ymax = t_admix_upper)) +
+  facet_wrap(~ groupAge, scales = "free_x")
+```
+
+```{r}
+samples %>% ggplot() + geom_histogram(aes(ageAverage))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+tracts_df$age_group <- cut(
+  tracts_df$ageAverage,
+  breaks = c(Inf, 20e3, 10e3, 0)
+)
+
+group_levels <- levels(tracts_df$age_group)
+
+tracts_df <- tracts_df %>%
+  mutate(
+    age_group = as.character(age_group),
+    age_group = ifelse(is.na(age_group), "present-day", age_group),
+    age_group = factor(age_group, levels = c("present-day", group_levels))
+  )
+
+highest_cov <- tracts_df %>%
+  distinct(sampleId, age_group, coverage) %>%
+  group_by(age_group) %>%
+  arrange(-coverage) %>%
+  slice_head(n = 3)
+highest_cov
+
+bin_step <- 5e3
+
+bins_df <- tracts_df %>%
+  filter(sampleId %in% highest_cov$sampleId) %>%
+  group_by(age_group) %>%
+  mutate(bin = cut(length, breaks = seq(1, 1e6, by = bin_step - 1), labels = FALSE, include.lowest = TRUE)) %>%
+  filter(!is.na(bin)) %>%
+  group_by(age_group, bin) %>%
+  summarise(count = n()) %>%
+  mutate(prop = count / sum(count))
+
+ggplot(bins_df, aes(bin, prop, color = age_group, group = age_group)) +
+  geom_point() +
+  stat_smooth(method = "nls", formula = y ~ SSasymp(x, Asym, R0, lrc), se = FALSE) +
+  scale_x_log10()
 ```
 
 
