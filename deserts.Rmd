@@ -342,6 +342,12 @@ ggplot(tracts_df) +
 
 ```{r}
 ggplot(tracts_df) +
+  geom_density(aes(length, color = age_group)) +
+  coord_cartesian(xlim = c(0, 1e6))
+```
+
+```{r}
+ggplot(tracts_df) +
   geom_boxplot(aes(age_group, length, color = age_group)) +
   geom_hline(yintercept = c(50e3, 250e3), linetype = "dashed")
 ```
@@ -451,7 +457,7 @@ fit_trunc_nls <- nls(counts ~ SSasymp(bins, Asym, R0, lrc))
 summary(fit_trunc_nls)
 lines(bins[!is.na(counts)], predict(fit_trunc_nls), col = "blue")
 
-fit_trunc_nls2 <- nls(counts ~ SSasymp(bins, Asym, R0, lrc), weights = 1 / bins)
+fit_trunc_nls2 <- nls(counts ~ SSasymp(bins, Asym, R0, lrc), weights = sqrt(1 / bins))
 summary(fit_trunc_nls2)
 lines(bins[!is.na(counts)], predict(fit_trunc_nls2), col = "green")
 
@@ -517,7 +523,7 @@ r <- 1e-8
 # plot(bins, props, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", log = "y")
 plot(bins, props, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin", ylim = c(0, 0.3))
 
-fit_trunc_nls2 <- nls(props ~ SSasymp(bins, Asym, R0, lrc), na.action = na.omit)
+fit_trunc_nls2 <- nls(props ~ SSasymp(bins, Asym, R0, lrc), weights = sqrt(1/bins))
 summary(fit_trunc_nls2)
 lines(bins[!is.na(counts)], predict(fit_trunc_nls2), col = "green")
 
@@ -534,26 +540,20 @@ lines(bins[!is.na(counts)], predict(fit_trunc_nls2), col = "green")
 ```{r}
 lrc_est <- coef(fit_trunc_nls2)["lrc"] %>% unname()
 
-# Calculate the estimate of lambda
+# calculate the estimate of lambda
 lambda_est <- exp(lrc_est)
 
-# Extract the standard error of lrc
+# extract the standard error of lrc
 lrc_se <- summary(fit_trunc_nls2)$parameters["lrc", "Std. Error"]
 
-# Use the delta method to approximate the standard error of lambda
+# use the delta method to approximate the standard error of lambda
 lambda_se <- lambda_est * lrc_se
 
-# Calculate the confidence interval for lambda
+# calculate the confidence interval for lambda
 alpha <- 0.05 # for a 95% confidence interval
 z <- qnorm(1 - alpha / 2)
 ci_lower <- lambda_est - z * lambda_se
 ci_upper <- lambda_est + z * lambda_se
-
-# Display the results
-lambda_est
-lambda_se
-ci_lower
-ci_upper
 
 t_est <- 1 / (bin_step * r * 1 / lambda_est)
 t_lower <- 1 / (bin_step * r * 1 / ci_lower)
@@ -564,13 +564,29 @@ cat("Mean admixture time:", t_est, "generations,", t_est * 26.9, "years\n",
 ```
 
 
+```{r}
+tracts_df$age_group <- cut(
+  tracts_df$ageAverage,
+  breaks = c(Inf, 20e3, 10e3, 0)
+)
+
+group_levels <- levels(tracts_df$age_group)
+
+tracts_df <- tracts_df %>%
+  mutate(
+    age_group = as.character(age_group),
+    age_group = ifelse(is.na(age_group), "present-day", age_group),
+    age_group = factor(age_group, levels = c("present-day", group_levels))
+  )
+```
 
 ```{r}
-samples <- metadata %>%
-  mutate(t_admix = lapply(sampleId, function(x) {
-bin_step <- 25e3
+age_groups <- unique(tracts_df$age_group)
 
-tract_bins <- tracts_df %>% filter(sampleId == x)
+results <- lapply(age_groups, function(x) {
+bin_step <- 10e3
+
+tract_bins <- tracts_df %>% filter(age_group == x)
 
 if (!nrow(tract_bins)) return(list(t_admix = NA, t_admix_lower = NA, t_admix_upper = NA))
 
@@ -604,25 +620,13 @@ t_est <- 1 / (bin_step * r * 1 / lambda_est) * 26.9
 t_lower <- 1 / (bin_step * r * 1 / ci_lower) * 26.9
 t_upper <- 1 / (bin_step * r * 1 / ci_upper) * 26.9
 
-list(t_admix = t_est, t_admix_lower = t_lower, t_admix_upper = t_upper)
-  })) %>% tidyr::unnest_wider(t_admix)
+tibble(age_group = x, t_admix = t_est, t_admix_lower = t_lower, t_admix_upper = t_upper)
+}) %>% do.call(rbind, .)
 ```
 
 ```{r}
-samples %>%
-ggplot() +
-  geom_boxplot(aes(groupAge, t_admix)) +
-  geom_jitter(aes(groupAge, t_admix))
-```
-
-```{r}
-ggplot(samples) +
-  geom_pointrange(aes(sampleId, t_admix, ymin = t_admix_lower, ymax = t_admix_upper)) +
-  facet_wrap(~ groupAge, scales = "free_x")
-```
-
-```{r}
-samples %>% ggplot() + geom_histogram(aes(ageAverage))
+ggplot(results) +
+  geom_pointrange(aes(x = age_group, y = t_admix, ymin = t_admix_lower, ymax = t_admix_upper))
 ```
 
 
@@ -631,26 +635,7 @@ samples %>% ggplot() + geom_histogram(aes(ageAverage))
 
 
 
-
-
-
-
-
 ```{r}
-tracts_df$age_group <- cut(
-  tracts_df$ageAverage,
-  breaks = c(Inf, 20e3, 10e3, 0)
-)
-
-group_levels <- levels(tracts_df$age_group)
-
-tracts_df <- tracts_df %>%
-  mutate(
-    age_group = as.character(age_group),
-    age_group = ifelse(is.na(age_group), "present-day", age_group),
-    age_group = factor(age_group, levels = c("present-day", group_levels))
-  )
-
 highest_cov <- tracts_df %>%
   distinct(sampleId, age_group, coverage) %>%
   group_by(age_group) %>%
