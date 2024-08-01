@@ -70,11 +70,11 @@ tracts_df <- read_tsv("data/sim_tracts.tsv")
 
 ```{r}
 # sample_age <- 50000
-# min_length <- 50e3
-# max_length <- 1e6
+# min_length <- 25e3
 
-pdf("admixture_dating.pdf", width = 14, height = 8)
+pdf("dating.pdf", width = 14, height = 8)
 
+max_length <- 1e6
 for (min_length in c(0, 25e3, 50e3)) {
 for (sample_age in unique(samples$time) ) {
   
@@ -91,7 +91,8 @@ density <- density[density > 0]
 
 # lm estimate
 lm_res <- lm(log(density) ~ length, weights = 1 / length)
-lambda_lm <- -coef(lm_res)["length"]
+lambda_lm <- -coef(lm_res)[["length"]]
+if (lambda_lm < 0) lambda_lm <- NA
 
 t_gens_lm <- lambda_lm / r
 t_lm <- t_gens_lm * gen_time + sample_age
@@ -108,23 +109,24 @@ orig_par <- par(no.readonly = TRUE)
 
 par(mfrow = c(1, 2))
 
-title <- sprintf("sample age %d, min length %d bp, max length %d Mb", sample_age, min_length, max_length / 1e6)
+title <- sprintf("sample age %d, tract length [%d bp, %d Mb]", sample_age, min_length, max_length / 1e6)
 
-legends <-c(sprintf("lm fit of t = %.1f kya, lambda = %f", round(t_lm / 1e3, 1), lambda_lm),
-            sprintf("MLE fit of t = %.1f kya, lambda = %f", round(t_mean / 1e3, 1), lambda_mean))
+legends <-c(sprintf("lm fit of t = %.1f kya", round(t_lm / 1e3, 1)),
+            sprintf("MLE fit of t = %.1f kya", round(t_mean / 1e3, 1)))
 
 # plot the results on the original exponential scale
 y_lm <- dexp(length, rate = lambda_lm)
 y_mean <- dexp(length, rate = lambda_mean)
 
-plot(length, density, xlim = c(min_length, max(length)), main = title)
+ylim <- c(min(c(density, y_lm, y_mean), na.rm = TRUE), max(c(density, y_lm, y_mean), na.rm = TRUE))
+plot(length, density, xlim = c(0, max(length)), main = title, ylim = ylim)
 lines(length + min_length, y_lm, col = "orange", lty = 2)
 lines(length + min_length, y_mean, col = "blue", lty = 2)
 
 legend("topright", fill = c("orange", "blue"), legend = legends)
 
 # plot the results on the log-transformed scale
-plot(length, log(density), xlim = c(min_length, max(length)), main = title)
+plot(length, log(density), xlim = c(0, max(length)), main = title)
 abline(lm_res, col = "orange", lty = 2)
 slope <- -lambda_mean
 intercept <- log(lambda_mean)
