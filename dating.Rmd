@@ -74,11 +74,13 @@ tracts_df <- read_tsv("data/sim_tracts.tsv")
 
 pdf("dating.pdf", width = 14, height = 8)
 
+results <- list(time = c(), min_length = c(), lambda_lm = c(), lambda_mean = c())
+
 max_length <- 1e6
 for (min_length in c(0, 25e3, 50e3)) {
 for (sample_age in unique(samples$time) ) {
   
-cat("minimum length:", min_length, "\nsample_age:", sample_age, "\n")
+# cat("minimum length:", min_length, "\nsample_age:", sample_age, "\n")
 
 r <- 1e-8
 
@@ -136,22 +138,29 @@ legend("topright", fill = c("orange", "blue"), legend = legends)
 
 par(orig_par)
 
+results[["time"]] <- c(results[["time"]], sample_age)
+results[["min_length"]] <- c(results[["min_length"]], min_length)
+results[["lambda_lm"]] <- c(results[["lambda_lm"]], lambda_lm)
+results[["lambda_mean"]] <- c(results[["lambda_mean"]], lambda_mean)
+
 }
 }
 
 dev.off()
+
+results_df <- as_tibble(results)
 ```
 
 ### Full, unfiltered distribution of tract lengths
 
 ```{r}
-tracts <- tracts_df
+tracts_full <- tracts_df
 ```
 
 ```{r}
 p_tracts_full <-
   ggplot() +
-  geom_histogram(data = tracts, aes(x = length, y = after_stat(density), fill = as.factor(time)),
+  geom_histogram(data = tracts_full, aes(x = length, y = after_stat(density), fill = as.factor(time)),
                  binwidth = 10000, alpha = 0.75) +
   labs(
     x = "tract length [bp]", y = "density", fill = "age of sample",
@@ -170,7 +179,7 @@ p_tracts_full
 ```{r}
 r <- 1e-8
 
-exp_df <- group_by(tracts, time) %>%
+exp_full_df <- group_by(tracts_full, time) %>%
   summarise(L = mean(length)) %>%
   mutate(
     lambda = 1 / L,
@@ -179,25 +188,25 @@ exp_df <- group_by(tracts, time) %>%
     t_admix = t_before + time
   )
 
-exp_df
+exp_full_df
 ```
 
 ```{r}
-exp_decay <- function(lambda, min_length, max_length) {
-  data.frame(length = seq(min_length, max_length, by = 100000)) %>%
+exp_full_decay <- function(lambda, max_length) {
+  data.frame(length = seq(0, max_length, by = 100000)) %>%
     mutate(density = dexp(length, rate = lambda))
 }
 
-predictions_df <-
-  exp_df %>%
+predictions_full_df <-
+  exp_full_df %>%
   rowwise() %>%
-  mutate(exp_data = list(exp_decay(lambda, min(tracts$length), max(tracts$length)))) %>%
+  mutate(exp_data = list(exp_decay(lambda, max(tracts_full$length)))) %>%
   unnest(cols = c(exp_data))
 
 p_fit_full <- p_tracts_full +
-  geom_line(data = predictions_df, aes(x = length, y = density),
+  geom_line(data = predictions_full_df, aes(x = length, y = density),
             linetype = "dashed", linewidth = 0.75, color = "black") +
-  geom_text(data = exp_df,
+  geom_text(data = exp_full_df,
             aes(x = Inf, y = Inf, label = paste("estimated admixture at", round(t_admix / 1e3, 1), "kya"),
                 color = as.factor(time)),
             hjust = 1.2, vjust = 8, size = 4)
@@ -205,16 +214,18 @@ p_fit_full <- p_tracts_full +
 p_fit_full
 ```
 
-## Distribution of tract lengths > 50 kb
+## Distribution of truncated tract lengths
 
 ```{r}
-tracts <- tracts_df %>% filter(length > 50e3)
+cutoff <- 50e3
+
+tracts_trunc <- tracts_df %>% filter(length > cutoff)
 ```
 
 ```{r}
-p_tracts_50kb <-
+p_tracts_trunc <-
   ggplot() +
-  geom_histogram(data = tracts, aes(x = length, y = after_stat(density), fill = as.factor(time)),
+  geom_histogram(data = tracts_trunc, aes(x = length, y = after_stat(density), fill = as.factor(time)),
                  binwidth = 10000, alpha = 0.75) +
   labs(
     x = "tract length [bp]", y = "density", fill = "age of sample",
@@ -227,45 +238,45 @@ p_tracts_50kb <-
   theme(legend.position = "none", text = element_text(size = 15)) +
   facet_wrap(~ time, labeller = labeller(time = function(x) paste("sample age =", x, "kya")))
 
-p_tracts_50kb
+p_tracts_trunc
 ```
 
 ```{r}
 r <- 1e-8
 
-exp_df <- group_by(tracts, time) %>%
+exp_trunc_df <- group_by(tracts_trunc, time) %>%
   summarise(L = mean(length)) %>%
   mutate(
-    lambda = 1 / L,
+    lambda = 1 / (L - cutoff),
     t_gen = 1 / (r / lambda),
     t_before = t_gen * gen_time,
     t_admix = t_before + time
   )
 
-exp_df
+exp_trunc_df
 ```
 
 ```{r}
-exp_decay <- function(lambda, min_length, max_length) {
-  data.frame(length = seq(min_length, max_length, by = 100000)) %>%
+exp_trunc_decay <- function(lambda, max_length) {
+  data.frame(length = seq(0, max_length, by = 100000)) %>%
     mutate(density = dexp(length, rate = lambda))
 }
 
-predictions_df <-
-  exp_df %>%
+predictions_trunc_df <-
+  exp_full_df %>%
   rowwise() %>%
-  mutate(exp_data = list(exp_decay(lambda, min(tracts$length), max(tracts$length)))) %>%
+  mutate(exp_data = list(exp_decay(lambda, max(tracts_trunc$length)))) %>%
   unnest(cols = c(exp_data))
 
-p_fit_50kb <- p_tracts_50kb +
-  geom_line(data = predictions_df, aes(x = length, y = density),
+p_fit_trunc <- p_tracts_trunc +
+  geom_line(data = predictions_trunc_df, aes(x = length + cutoff, y = density),
             linetype = "dashed", linewidth = 0.75, color = "black") +
-  geom_text(data = exp_df,
+  geom_text(data = exp_trunc_df,
             aes(x = Inf, y = Inf, label = paste("estimated admixture at", round(t_admix / 1e3, 1), "kya"),
                 color = as.factor(time)),
             hjust = 1.2, vjust = 8, size = 4)
 
-p_fit_50kb
+p_fit_trunc
 ```
 
 ## Comparison of both filterings
@@ -274,7 +285,7 @@ p_fit_50kb
 ggplot() +
   geom_density(data = tracts_df,
                aes(length, y = after_stat(count), color = factor(time))) +
-  geom_density(data = filter(tracts_df, length >= 50e3),
+  geom_density(data = filter(tracts_df, length >= cutoff),
                aes(length, y = after_stat(count), color = factor(time)),
                linetype = "dashed", color = "black") +
   facet_wrap(~ time) +
@@ -283,7 +294,7 @@ ggplot() +
 
 ```{r}
 p_fit_full
-p_fit_50kb
+p_fit_trunc
 ```
 
 
