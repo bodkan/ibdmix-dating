@@ -30,7 +30,7 @@ read_tracts <- function(set, metadata) {
     mutate(chrom = paste0("chr", chrom)) %>%
     filter(ID %in% unique(info$sampleId)) %>%
     select(ID, chrom, start, end) %>%
-    mutate(set = set)
+    mutate(length = end - start, set = set)
 
   tracts
 }

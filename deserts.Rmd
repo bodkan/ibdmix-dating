@@ -140,6 +140,7 @@ Looks like `ageAverage` has a value for every individual:
 
 ```{r}
 metadata %>%
+  filter(groupAge == "Ancient") %>%
   ggplot() +
   geom_histogram(aes(ageAverage))
 ```
@@ -154,6 +155,26 @@ tracts <- rbind(tracts_modern, tracts_ancient)
 
 tracts
 ```
+
+```{r}
+tracts_df <- select(metadata, sampleId, ageAverage, coverage) %>% inner_join(tracts, by = c("sampleId" = "ID"))
+
+tracts_df$age_group <- cut(
+  tracts_df$ageAverage,
+  breaks = c(Inf, 20e3, 10e3, 5e3, 100, 0),
+)
+
+group_levels <- levels(tracts_df$age_group)
+
+tracts_df <- tracts_df %>%
+  mutate(
+    age_group = as.character(age_group),
+    age_group = ifelse(is.na(age_group), "present-day", age_group),
+    age_group = factor(age_group, levels = c("present-day", group_levels))
+  )
+```
+```
+
 
 ```{r}
 tracts %>%
@@ -180,6 +201,8 @@ ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
 ```{r}
 ggplot2::ggsave(paste0("deserts_1+3+7+8.pdf"), width = 13, height = 7)
 ```
+
+
 
 ## Analysis of tracts inferred in real data
 
@@ -305,28 +328,6 @@ cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 1))
 ```
 
 ## A couple of diagnostics and sanity checks
-
-### Comparison of tracts between ancient and present-day humans
-
-```{r}
-tracts_df <- select(metadata, sampleId, ageAverage, coverage) %>% inner_join(tracts, by = c("sampleId" = "ID"))
-tracts_df$length <- tracts_df$end - tracts_df$start
-tracts_df$ageAverage <- ifelse(is.na(tracts_df$ageAverage), 0, tracts_df$ageAverage)
-
-tracts_df$age_group <- cut(
-  tracts_df$ageAverage,
-  breaks = c(Inf, 20e3, 10e3, 5e3, 100, 0),
-)
-
-group_levels <- levels(tracts_df$age_group)
-
-tracts_df <- tracts_df %>%
-  mutate(
-    age_group = as.character(age_group),
-    age_group = ifelse(is.na(age_group), "present-day", age_group),
-    age_group = factor(age_group, levels = c("present-day", group_levels))
-  )
-```
 
 ### Sanity checks of my filtering against Alba's Figure 2. B/C
 
