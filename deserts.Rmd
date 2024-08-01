@@ -173,7 +173,6 @@ tracts_df <- tracts_df %>%
     age_group = factor(age_group, levels = c("present-day", group_levels))
   )
 ```
-```
 
 
 ```{r}

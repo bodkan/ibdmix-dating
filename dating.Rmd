@@ -25,6 +25,8 @@ library(tidyr)
 
 library(slendr)
 init_env(quiet = TRUE)
+
+suppressPackageStartupMessages(source(here::here("utils.R")))
 ```
 
 ## Testing the admixture dating methodology on simulations
@@ -92,7 +94,7 @@ ggplot() +
 # sample_age <- 50000
 # min_length <- 25e3
 
-pdf("dating.pdf", width = 14, height = 8)
+pdf("dating_sims.pdf", width = 14, height = 8)
 
 results <- list(time = c(), min_length = c(), lambda_lm = c(), lambda_mean = c())
 
@@ -174,7 +176,7 @@ results_df <- as_tibble(results)
 ## Estimating admixture time from tract lengths v2
 
 ```{r}
-pdf("dating_v2.pdf", width = 12, height = 10)
+pdf("dating_sims_v2.pdf", width = 12, height = 10)
 
 max_length <- Inf
 
@@ -239,11 +241,122 @@ print(p_fit)
 dev.off()
 ```
 
+## Admixture dating using empirical data
 
+```{r}
+metadata <- read_metadata()
 
-<!-- ```{r} -->
-<!-- bins <- sort(unique(tracts_df$bin)) -->
-<!-- counts <- as.integer(table(tracts_df$bin)) -->
+metadata$age_group <- cut(metadata$ageAverage, breaks = c(Inf, 15e3, 10e3, 5e3,  0))
+group_levels <- levels(metadata$age_group)
 
-<!-- plot(bins, counts, xlab = "Neanderthal tract length bin", ylab = "count of tracts in bin") -->
-<!-- ``` -->
+metadata <- metadata %>%
+  mutate(
+    age_group = as.character(age_group),
+    age_group = ifelse(is.na(age_group), "present-day", age_group),
+    age_group = factor(age_group, levels = c("present-day", group_levels))
+  )
+```
+
+```{r}
+ggplot(metadata) +
+  geom_boxplot(aes(ageAverage, color = age_group))
+```
+
+```{r}
+tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
+tracts_df <- select(metadata, sampleId, ageAverage, age_group, coverage) %>%
+  inner_join(tracts_df, by = c("sampleId" = "ID"))
+
+tracts_df %>%
+  group_by(age_group) %>%
+  summarise(mean(ageAverage))
+```
+
+```{r}
+ggplot(tracts_df) +
+  geom_density(aes(length, color = age_group)) +
+  coord_cartesian(xlim = c(0, 1e6))
+```
+
+```{r}
+# sample_age <- "present-day"
+# min_length <- 50e3
+
+pdf("dating_empirical.pdf", width = 14, height = 8)
+
+results <- list(time = c(), min_length = c(), lambda_lm = c(), lambda_mean = c())
+
+max_length <- 1e6
+for (min_length in c(50e3)) {
+for (sample_age in levels(metadata$age_group)) {
+  
+cat("minimum length:", min_length, "\nsample_age:", sample_age, "\n")
+
+r <- 1e-8
+
+filtered_tracts <- tracts_df %>% filter(age_group == sample_age, length >= min_length, length <= max_length)
+
+bin_data <- hist(filtered_tracts$length, plot = FALSE, breaks = 100)
+density <- bin_data$density
+length <- bin_data$mids[density > 0]
+density <- density[density > 0]
+
+# lm estimate
+lm_res <- lm(log(density) ~ length, weights = 1 / length)
+lambda_lm <- -coef(lm_res)[["length"]]
+if (lambda_lm < 0) lambda_lm <- NA
+
+t_gens_lm <- lambda_lm / r
+t_lm <- t_gens_lm * gen_time + mean(filtered_tracts$ageAverage)
+
+# MLE estimate
+L <- mean(filtered_tracts$length)
+lambda_mean <- 1 / (L - min_length)
+
+t_gens_mean <- 1 / (r * 1 / lambda_mean)
+t_mean <- t_gens_mean * gen_time + mean(filtered_tracts$ageAverage)
+
+# plotting
+orig_par <- par(no.readonly = TRUE)
+
+par(mfrow = c(1, 2))
+
+title <- sprintf("sample age %s, tract length [%d bp, %d Mb]", sample_age, min_length, max_length / 1e6)
+
+legends <-c(sprintf("lm fit of t = %.1f kya", round(t_lm / 1e3, 1)),
+            sprintf("MLE fit of t = %.1f kya", round(t_mean / 1e3, 1)))
+
+# plot the results on the original exponential scale
+y_lm <- dexp(length, rate = lambda_lm)
+y_mean <- dexp(length, rate = lambda_mean)
+
+plot(length, density, xlim = c(0, max(length)), main = title, ylim = c(0, 2e-5))
+lines(length, y_lm, col = "orange", lty = 2)
+lines(length, y_mean, col = "blue", lty = 2)
+
+legend("topright", fill = c("orange", "blue"), legend = legends)
+
+# plot the results on the log-transformed scale
+plot(length, log(density), xlim = c(0, max(length)), ylim = log(c(0.000000001, 2e-5)), main = title)
+abline(lm_res, col = "orange", lty = 2)
+slope <- -lambda_mean
+intercept <- log(lambda_mean)
+abline(a = intercept, b = slope, col = "blue", lty = 2)
+
+legend("topright", fill = c("orange", "blue"), legend = legends)
+
+par(orig_par)
+
+results[["time"]] <- c(results[["time"]], sample_age)
+results[["min_length"]] <- c(results[["min_length"]], min_length)
+results[["lambda_lm"]] <- c(results[["lambda_lm"]], lambda_lm)
+results[["lambda_mean"]] <- c(results[["lambda_mean"]], lambda_mean)
+
+}
+}
+
+dev.off()
+
+results_df <- as_tibble(results)
+```
+
