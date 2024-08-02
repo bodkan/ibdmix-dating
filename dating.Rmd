@@ -94,13 +94,14 @@ ggplot() +
 # sample_age <- 50000
 # min_length <- 25e3
 
+max_length <- 1e6
+
 pdf("dating_sims.pdf", width = 14, height = 8)
 
 results <- list(time = c(), min_length = c(), lambda_lm = c(), lambda_mean = c())
 
-max_length <- 1e6
 for (min_length in c(0, 25e3, 50e3)) {
-for (sample_age in unique(samples$time) ) {
+for (sample_age in unique(samples$time)) {
   
 # cat("minimum length:", min_length, "\nsample_age:", sample_age, "\n")
 
@@ -128,6 +129,20 @@ lambda_mean <- 1 / (L - min_length)
 t_gens_mean <- 1 / (r * 1 / lambda_mean)
 t_mean <- t_gens_mean * gen_time + sample_age
 
+# nls estimate
+lambda_nls <- tryCatch(
+  {
+    nls_res <- nls(density ~ SSasymp(length, Asym, R0, lrc))
+    # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp
+    exp(unname(coef(nls_res)["lrc"]))
+  },
+  warning = function(w) NA,
+  error = function(e) NA
+)
+
+t_gens_nls <- lambda_nls / r
+t_nls <- t_gens_nls * gen_time + sample_age
+
 # plotting
 orig_par <- par(no.readonly = TRUE)
 
@@ -136,27 +151,31 @@ par(mfrow = c(1, 2))
 title <- sprintf("sample age %d, tract length [%d bp, %d Mb]", sample_age, min_length, max_length / 1e6)
 
 legends <-c(sprintf("lm fit of t = %.1f kya", round(t_lm / 1e3, 1)),
-            sprintf("MLE fit of t = %.1f kya", round(t_mean / 1e3, 1)))
+            sprintf("MLE fit of t = %.1f kya", round(t_mean / 1e3, 1)),
+            sprintf("nls fit of t = %.1f kya", round(t_nls / 1e3, 1)))
 
 # plot the results on the original exponential scale
 y_lm <- dexp(length, rate = lambda_lm)
 y_mean <- dexp(length, rate = lambda_mean)
+y_nls <- dexp(length, rate = lambda_nls)
 
-ylim <- c(min(c(density, y_lm, y_mean), na.rm = TRUE), max(c(density, y_lm, y_mean), na.rm = TRUE))
+ylim <- c(min(c(density, y_lm, y_mean, y_nls), na.rm = TRUE),
+          max(c(density, y_lm, y_mean, y_nls), na.rm = TRUE))
 plot(length, density, xlim = c(0, max(length)), main = title, ylim = ylim)
-lines(length + min_length, y_lm, col = "orange", lty = 2)
-lines(length + min_length, y_mean, col = "blue", lty = 2)
+lines(length + min_length, y_lm, col = "purple", lty = 2, lwd = 2)
+lines(length + min_length, y_mean, col = "blue", lty = 2, lwd = 2)
+lines(length + min_length, y_nls, col = "green", lty = 2, lwd = 2)
 
-legend("topright", fill = c("orange", "blue"), legend = legends)
+legend("topright", fill = c("purple", "blue", "green"), legend = legends)
 
 # plot the results on the log-transformed scale
 plot(length, log(density), xlim = c(0, max(length)), main = title)
-abline(lm_res, col = "orange", lty = 2)
-slope <- -lambda_mean
-intercept <- log(lambda_mean)
-abline(a = intercept, b = slope, col = "blue", lty = 2)
+abline(lm_res, col = "purple", lty = 2, lwd = 2)
+abline(a = log(lambda_mean), b = -lambda_mean, col = "blue", lty = 2, lwd = 2)
+if (!is.na(lambda_nls))
+  abline(a = log(lambda_nls), b = -lambda_nls, col = "green", lty = 2, lwd = 2)
 
-legend("topright", fill = c("orange", "blue"), legend = legends)
+legend("topright", fill = c("purple", "blue", "green"), legend = legends)
 
 par(orig_par)
 
@@ -164,6 +183,7 @@ results[["time"]] <- c(results[["time"]], sample_age)
 results[["min_length"]] <- c(results[["min_length"]], min_length)
 results[["lambda_lm"]] <- c(results[["lambda_lm"]], lambda_lm)
 results[["lambda_mean"]] <- c(results[["lambda_mean"]], lambda_mean)
+results[["lambda_nls"]] <- c(results[["lambda_nls"]], lambda_nls)
 
 }
 }
