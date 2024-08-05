@@ -127,6 +127,15 @@ if (lambda_lm < 0) lambda_lm <- NA
 t_gens_lm <- lambda_lm / r
 t_lm <- t_gens_lm * gen_time + sample_age
 
+# weighted lm estimate of admixture time
+#   -- based on log-transformed linear fit of density vs tract length
+lmw_res <- lm(log(density) ~ length, weights = 1 / length)
+lambda_lmw <- -coef(lmw_res)[["length"]]
+if (lambda_lmw < 0) lambda_lmw <- NA
+
+t_gens_lmw <- lambda_lmw / r
+t_lmw <- t_gens_lmw * gen_time + sample_age
+
 # MLE estimate of admixture time
 #  -- based on computing average length as the expectation of the theoretical exponential distribution
 L <- mean(filtered_tracts$length)
@@ -157,6 +166,7 @@ par(mfrow = c(1, 2))
 title <- sprintf("sample age %d, tract length [%d bp, %d Mb]", sample_age, min_length, max_length / 1e6)
 
 legends <-c(sprintf("lm fit of t = %.1f kya", round(t_lm / 1e3, 1)),
+            sprintf("weighted lm fit of t = %.1f kya", round(t_lmw / 1e3, 1)),
             sprintf("MLE fit of t = %.1f kya", round(t_mean / 1e3, 1)),
             sprintf("nls fit of t = %.1f kya", round(t_nls / 1e3, 1)))
 
@@ -165,33 +175,37 @@ legends <-c(sprintf("lm fit of t = %.1f kya", round(t_lm / 1e3, 1)),
 # compute dexp() on the original unfiltered x-axis scale for plotting purposes)
 x_values <- seq(0, max_length, by = 5000)
 y_lm <- dexp(x_values, rate = lambda_lm)
+y_lmw <- dexp(x_values, rate = lambda_lmw)
 y_mean <- dexp(x_values, rate = lambda_mean)
 y_nls <- dexp(x_values, rate = lambda_nls)
 
-ylim <- c(min(c(density, y_lm, y_mean, y_nls), na.rm = TRUE),
+ylim <- c(min(c(density, y_lm, y_lmw, y_mean, y_nls), na.rm = TRUE),
           3e-5) #max(c(density, y_lm, y_mean, y_nls), na.rm = TRUE))
 plot(length, density, xlim = c(0, max_length), main = title, ylim = ylim)
 # we shift 
 lines(x_values + min_length, y_lm, col = "purple", lty = 2, lwd = 2)
+lines(x_values + min_length, y_lmw, col = "darksalmon", lty = 2, lwd = 2)
 lines(x_values + min_length, y_mean, col = "blue", lty = 2, lwd = 2)
 lines(x_values + min_length, y_nls, col = "green", lty = 2, lwd = 2)
 
-legend("topright", fill = c("purple", "blue", "green"), legend = legends)
+legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = legends)
 
 # plot the results on the log-transformed scale
 plot(length, log(density), xlim = c(0, max_length), main = title, ylim = c(-15, -11))
 abline(lm_res, col = "purple", lty = 2, lwd = 2)
+abline(lmw_res, col = "darksalmon", lty = 2, lwd = 2)
 abline(a = log(lambda_mean) + lambda_mean * min_length, b = -lambda_mean, col = "blue", lty = 2, lwd = 2)
 if (!is.na(lambda_nls))
   abline(a = log(lambda_nls) + lambda_mean * min_length, b = -lambda_nls, col = "green", lty = 2, lwd = 2)
 
-legend("topright", fill = c("purple", "blue", "green"), legend = legends)
+legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = legends)
 
 par(orig_par)
 
 results[["time"]] <- c(results[["time"]], sample_age)
 results[["min_length"]] <- c(results[["min_length"]], min_length)
 results[["lambda_lm"]] <- c(results[["lambda_lm"]], lambda_lm)
+results[["lambda_lmw"]] <- c(results[["lambda_lmw"]], lambda_lmw)
 results[["lambda_mean"]] <- c(results[["lambda_mean"]], lambda_mean)
 results[["lambda_nls"]] <- c(results[["lambda_nls"]], lambda_nls)
 
