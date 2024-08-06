@@ -38,7 +38,8 @@ afr <- population("AFR", parent = anc, N = 10000, time = 650000)
 nea <- population("NEA", parent = anc, N = 2000, time = 650000)
 eur <- population("EUR", parent = afr, N = 5000, time = 80000)
 
-gen_time <- 27
+# https://www.science.org/doi/full/10.1126/sciadv.abm7047
+gen_time <- 26.9
 t_admix <- round(55000 / gen_time) * gen_time
 
 gf <- gene_flow(from = nea, to = eur, rate = 0.03, start = t_admix, end = t_admix - gen_time)
@@ -142,7 +143,7 @@ t_lmw <- t_gens_lmw * gen_time + sample_age
 L <- mean(filtered_tracts$length)
 lambda_mean <- 1 / (L - min_length)
 
-t_gens_mean <- 1 / (r * 1 / lambda_mean)
+t_gens_mean <- lambda_mean / r
 t_mean <- t_gens_mean * gen_time + sample_age
 
 # nls estimate -- computing the rate of decay (lambda) by fitting an exponential curve directly
@@ -214,7 +215,7 @@ results[[length(results) + 1]] <- tibble(
   time = sample_age,
   min_length = min_length,
   method = c("lm", "lm (weighted)", "MLE", "nls"),
-  value = c(lambda_lm, lambda_lmw, lambda_mean, lambda_nls),
+  lambda = c(lambda_lm, lambda_lmw, lambda_mean, lambda_nls),
   rmse_density = c(rmse_lm, rmse_lmw, rmse_mean, rmse_nls),
   ratio_time = c(t_lm, t_lmw, t_mean, t_nls) / t_admix
 )
@@ -256,13 +257,13 @@ cowplot::plot_grid(p_density, p_time, nrow = 2)
 ## Estimating admixture time from tract lengths v2
 
 ```{r}
-min_length <- 0
+# min_length <- 0
 
-# pdf("dating_sims_v2.pdf", width = 12, height = 10)
+pdf("dating_sims_v2.pdf", width = 12, height = 10)
 
 max_length <- Inf
 
-# for (min_length in c(0, 50e3, 100e3)) {
+for (min_length in c(0, 50e3, 100e3)) {
 tracts_filt_df <- tracts_df %>% filter(length >= min_length, length <= max_length)
 
 p_tracts <-
@@ -277,7 +278,7 @@ p_tracts <-
     x = "tract length [bp]", y = "density", fill = "age of sample",
     title = "Tract length distribution as a function of admixed sample's age",
     subtitle = paste0(
-      "(assuming single-pulse admixture at ~ 55 kya, tract length [", min_length, " bp, ", max_length / 1e6," Mb])"
+      "(assuming single-pulse admixture at ~ 55 kya, tract length [", as.integer(min_length / 1e3), " kb, ", max_length / 1e6," Mb])"
     )
   ) +
   scale_x_continuous(labels = scales::comma) +
@@ -320,9 +321,9 @@ p_fit <- p_tracts +
             hjust = 1.2, vjust = 8, size = 4)
 
 print(p_fit)
-# }
+}
 
-# dev.off()
+dev.off()
 ```
 
 ## Admixture dating using empirical data
