@@ -22,6 +22,7 @@ library(ggplot2)
 library(readr)
 library(dplyr)
 library(tidyr)
+library(Metrics)
 
 library(slendr)
 init_env(quiet = TRUE)
@@ -96,15 +97,15 @@ ggplot() +
 
 max_length <- Inf
 
-pdf("dating_sims.pdf", width = 14, height = 8)
+results <- list()
 
-results <- list(time = c(), min_length = c(), lambda_lm = c(), lambda_mean = c())
+pdf("dating_sims.pdf", width = 14, height = 8)
 
 for (min_length in c(0, 50e3, 100e3)) {
 
 plot(1, type = "n", axes = FALSE, xlab = "", ylab = "", xlim = c(0, 1), ylim = c(0, 1))
 text(0.5, 0.5, paste("Minimum tract length:", min_length, "bp"), cex = 3)
-  
+
 for (sample_age in unique(samples$time)) {
   
 # cat("minimum length:", min_length, "\nsample_age:", sample_age, "\n")
@@ -173,7 +174,7 @@ legends <-c(sprintf("lm fit of t = %.1f kya", round(t_lm / 1e3, 1)),
 # plot the results on the original exponential scale (although we fit truncated exponential,
 # the rate corresponds to the shape of the original unfiltered exponential function, so we
 # compute dexp() on the original unfiltered x-axis scale for plotting purposes)
-x_values <- seq(0, max(tracts_df$length), by = 5000)
+x_values <- sort(unique(c(length, seq(0, max(tracts_df$length), by = 5000))))
 y_lm <- dexp(x_values, rate = lambda_lm)
 y_lmw <- dexp(x_values, rate = lambda_lmw)
 y_mean <- dexp(x_values, rate = lambda_mean)
@@ -203,35 +204,75 @@ legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = l
 
 par(orig_par)
 
-results[["time"]] <- c(results[["time"]], sample_age)
-results[["min_length"]] <- c(results[["min_length"]], min_length)
-results[["lambda_lm"]] <- c(results[["lambda_lm"]], lambda_lm)
-results[["lambda_lmw"]] <- c(results[["lambda_lmw"]], lambda_lmw)
-results[["lambda_mean"]] <- c(results[["lambda_mean"]], lambda_mean)
-results[["lambda_nls"]] <- c(results[["lambda_nls"]], lambda_nls)
+fitted_idx <- match(length, x_values)
+rmse_lm <- rmse(density, y_lm[fitted_idx])
+rmse_lmw <- rmse(density, y_lmw[fitted_idx])
+rmse_mean <- rmse(density, y_mean[fitted_idx])
+rmse_nls <- rmse(density, y_nls[fitted_idx])
+
+results[[length(results) + 1]] <- tibble(
+  time = sample_age,
+  min_length = min_length,
+  method = c("lm", "lm (weighted)", "MLE", "nls"),
+  value = c(lambda_lm, lambda_lmw, lambda_mean, lambda_nls),
+  rmse_density = c(rmse_lm, rmse_lmw, rmse_mean, rmse_nls),
+  ratio_time = c(t_lm, t_lmw, t_mean, t_nls) / t_admix
+)
 
 }
 }
 
 dev.off()
 
-results_df <- as_tibble(results)
+results_df <- do.call(rbind, results)
 ```
+
+```{r}
+p_density <- results_df %>%
+ggplot(aes(as.factor(time), rmse_density, color = method)) +
+  geom_point() +
+  geom_line(aes(group = method)) +
+  theme_bw() +
+  xlab("sample age [years ago]") +
+  ylab("RMSE observed vs fitted tract length density") +
+  facet_wrap(~ min_length,
+             labeller = labeller(min_length = function(x) paste("minimum segment length =", x, "bp")))
+
+p_time <- results_df %>%
+ggplot(aes(as.factor(time), ratio_time, color = method)) +
+  geom_point() +
+  geom_line(aes(group = method)) +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  theme_bw() +
+  xlab("sample age [years ago]") +
+  ylab("inferred / true admixture time") +
+  facet_wrap(~ min_length,
+             labeller = labeller(min_length = function(x) paste("minimum segment length =", as.integer(x) / 1e3, "kb")))
+
+cowplot::plot_grid(p_density, p_time, nrow = 2)
+```
+
 
 ## Estimating admixture time from tract lengths v2
 
 ```{r}
-pdf("dating_sims_v2.pdf", width = 12, height = 10)
+min_length <- 0
+
+# pdf("dating_sims_v2.pdf", width = 12, height = 10)
 
 max_length <- Inf
 
-for (min_length in c(0, 50e3, 100e3)) {
+# for (min_length in c(0, 50e3, 100e3)) {
 tracts_filt_df <- tracts_df %>% filter(length >= min_length, length <= max_length)
 
 p_tracts <-
   ggplot() +
-  geom_histogram(data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(time)),
-                 binwidth = 10000, alpha = 0.75) +
+  geom_histogram(
+    data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(time)),
+    binwidth = 10000, alpha = 0.75) +
+  # geom_density(
+  #   data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(time)),
+  #   bw = 5000, alpha = 0.75, color = FALSE) +
   labs(
     x = "tract length [bp]", y = "density", fill = "age of sample",
     title = "Tract length distribution as a function of admixed sample's age",
@@ -246,31 +287,29 @@ p_tracts <-
   theme(legend.position = "none", text = element_text(size = 15)) +
   facet_wrap(~ time, labeller = labeller(time = function(x) paste("sample age =", x, "kya")))
 
-# p_tracts
-
 r <- 1e-8
 
 exp_df <- group_by(tracts_filt_df, time) %>%
   summarise(L = mean(length)) %>%
   mutate(
     lambda = 1 / (L - min_length),
-    t_gen = 1 / (r / lambda),
+    t_gen = lambda / r,
     t_before = t_gen * gen_time,
     t_admix = t_before + time
   )
 
-# exp_df
-
-exp_decay <- function(lambda, max_length) {
-  data.frame(length = seq(0, max_length, by = 100000)) %>%
+exp_decay <- function(lambda, max) {
+  data.frame(length = seq(0, max, by = 1000)) %>%
     mutate(density = dexp(length, rate = lambda))
 }
 
 predictions_df <-
   exp_df %>%
+  select(time, lambda) %>%
   rowwise() %>%
   mutate(exp_data = list(exp_decay(lambda, max(tracts_filt_df$length)))) %>%
-  unnest(cols = c(exp_data))
+  unnest(cols = c(exp_data)) %>%
+  select(-lambda)
 
 p_fit <- p_tracts +
   geom_line(data = predictions_df, aes(x = length + min_length, y = density),
@@ -281,9 +320,9 @@ p_fit <- p_tracts +
             hjust = 1.2, vjust = 8, size = 4)
 
 print(p_fit)
-}
+# }
 
-dev.off()
+# dev.off()
 ```
 
 ## Admixture dating using empirical data
