@@ -236,7 +236,7 @@ ggplot(aes(as.factor(time), rmse_density, color = method)) +
   xlab("sample age [years ago]") +
   ylab("RMSE observed vs fitted tract length density") +
   facet_wrap(~ min_length,
-             labeller = labeller(min_length = function(x) paste("minimum segment length =", x, "bp")))
+             labeller = labeller(min_length = function(x) paste("minimum segment length =", as.integer(x) / 1e3, "kb")))
 
 p_time <- results_df %>%
 ggplot(aes(as.factor(time), ratio_time, color = method)) +
