@@ -388,7 +388,7 @@ ggplot(tracts_df) +
 # sample_age <- "present-day"
 # min_length <- 50e3
 
-max_length <- 2e6
+max_length <- 1e6
 
 results <- list()
 
