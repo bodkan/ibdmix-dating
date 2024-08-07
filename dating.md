@@ -21,6 +21,45 @@ suppressPackageStartupMessages(source(here::here("utils.R")))
 #> Warning: package 'GenomeInfoDb' was built under R version 4.3.3
 ```
 
+## Fitting exponential decay of truncated distributions
+
+``` r
+set.seed(42)
+
+lambda_true <- 0.1
+
+y_full <- rexp(100000, rate = lambda_true)
+
+hist(y_full, breaks = seq(0, max(y_full), length.out = 100), freq = FALSE)
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+
+``` r
+
+(mean_full <- mean(y_full))
+#> [1] 9.981767
+(lambda_full <- 1 / mean_full)
+#> [1] 0.1001827
+```
+
+``` r
+cutoff <- 5
+y_trunc <- y_full[y_full > cutoff]
+
+h_trunc <- hist(y_trunc, breaks = seq(0, max(y_full), length.out = 100), freq = FALSE)
+
+(mean_trunc <- mean(y_trunc)) - cutoff
+#> [1] 9.997065
+(lambda_trunc <- 1 / (mean_trunc - cutoff))
+#> [1] 0.1000294
+
+x_values <- h_trunc$mids
+lines(x_values + cutoff, dexp(x_values, rate = lambda_trunc), col = "red", lty = "dashed", lwd = 2)
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+
 ## Testing the admixture dating methodology on simulations
 
 ``` r
@@ -45,7 +84,7 @@ samples <- schedule_sampling(model, times = c(50, 40, 30, 20, 10, 0) * 1e3, list
 plot_model(model, proportions = TRUE, order = c("AFR", "EUR", "ancestor", "NEA"))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
 ``` r
 ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples = samples, random_seed = 42)
@@ -93,7 +132,7 @@ ggplot() +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 <!-- ```{r} -->
 <!-- min_length <- 50e3 -->
@@ -280,7 +319,7 @@ p_time <- results_df %>%
 cowplot::plot_grid(p_density, p_time, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
 ``` r
 p_density2 <- results_df %>%
@@ -310,7 +349,7 @@ p_time2 <- results_df %>%
 cowplot::plot_grid(p_density2, p_time2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
 ## Estimating admixture time from tract lengths v2
 
@@ -437,7 +476,7 @@ ggplot(metadata) +
         axis.title.x = element_text(size = 15, angle = 0, hjust = 0.5))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 ``` r
 metadata %>%
@@ -499,7 +538,7 @@ ggplot() +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age:", x)))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -508,7 +547,7 @@ ggplot(tracts_df) +
   theme_bw()
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 ``` r
 # sample_age <- "present-day"
@@ -679,7 +718,7 @@ p_density2 <- results_df %>%
 cowplot::plot_grid(p_density, p_density2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ``` r
 p_time <- results_df %>%
@@ -712,4 +751,4 @@ p_time2 <- results_df %>%
 cowplot::plot_grid(p_time, p_time2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->

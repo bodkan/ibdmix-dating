@@ -30,6 +30,35 @@ init_env(quiet = TRUE)
 suppressPackageStartupMessages(source(here::here("utils.R")))
 ```
 
+## Fitting exponential decay of truncated distributions
+
+```{r}
+set.seed(42)
+
+lambda_true <- 0.1
+
+y_full <- rexp(100000, rate = lambda_true)
+
+hist(y_full, breaks = seq(0, max(y_full), length.out = 100), freq = FALSE)
+
+(mean_full <- mean(y_full))
+(lambda_full <- 1 / mean_full)
+```
+
+```{r}
+cutoff <- 5
+y_trunc <- y_full[y_full > cutoff]
+
+h_trunc <- hist(y_trunc, breaks = seq(0, max(y_full), length.out = 100), freq = FALSE)
+
+(mean_trunc <- mean(y_trunc)) - cutoff
+(lambda_trunc <- 1 / (mean_trunc - cutoff))
+
+x_values <- h_trunc$mids
+lines(x_values + cutoff, dexp(x_values, rate = lambda_trunc), col = "red", lty = "dashed", lwd = 2)
+```
+
+
 ## Testing the admixture dating methodology on simulations
 
 ```{r}
