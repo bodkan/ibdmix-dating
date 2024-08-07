@@ -184,10 +184,12 @@ for (min_length in c(0, 50e3, 100e3)) {
     title <- sprintf("sample age %d, tract length [%d kb, %.1f Mb]",
                      sample_age, round(min_length / 1e3, 1), round(max_length / 1e6, 1))
     
-    legends <-c(sprintf("lm fit of t = %.1f kya", round(t_lm / 1e3, 1)),
-                sprintf("weighted lm fit of t = %.1f kya", round(t_lmw / 1e3, 1)),
-                sprintf("MLE fit of t = %.1f kya", round(t_mean / 1e3, 1)),
-                sprintf("nls fit of t = %.1f kya", round(t_nls / 1e3, 1)))
+    legends <- c(
+      sprintf("lm fit: admixture %.1f generations prior ~ %.1f kya", t_gens_lm, round(t_lm / 1e3, 1)),
+      sprintf("weighted lm fit: admixture %.1f generations prior ~ %.1f kya", t_gens_lmw, round(t_lmw / 1e3, 1)),
+      sprintf("MLE fit: admixture %.1f generations prior ~ %.1f kya", t_gens_mean, round(t_mean / 1e3, 1)),
+      sprintf("nls fit: admixture %.1f generations prior ~ %.1f kya", t_gens_nls, round(t_nls / 1e3, 1))
+    )
     
     # plot the results on the original exponential scale (although we fit truncated exponential,
     # the rate corresponds to the shape of the original unfiltered exponential function, so we
@@ -466,7 +468,7 @@ results <- list()
 
 pdf("dating_empirical.pdf", width = 14, height = 8)
 
-for (min_length in c(50e3, 100e3)) {
+for (min_length in c(50e3)) {
 
   plot(1, type = "n", axes = FALSE, xlab = "", ylab = "", xlim = c(0, 1), ylim = c(0, 1))
   text(0.5, 0.5, paste("Minimum tract length:", as.integer(min_length), "bp"), cex = 3)
@@ -531,10 +533,12 @@ for (min_length in c(50e3, 100e3)) {
     title <- sprintf("sample age %.1f, tract length [%d kb, %.1f Mb]",
                      sample_age, round(min_length / 1e3, 1), round(max_length / 1e6, 1))
     
-    legends <-c(sprintf("lm fit of t = %.1f kya", round(t_lm / 1e3, 1)),
-                sprintf("weighted lm fit of t = %.1f kya", round(t_lmw / 1e3, 1)),
-                sprintf("MLE fit of t = %.1f kya", round(t_mean / 1e3, 1)),
-                sprintf("nls fit of t = %.1f kya", round(t_nls / 1e3, 1)))
+    legends <- c(
+      sprintf("lm fit: admixture %.1f generations prior ~ %.1f kya", t_gens_lm, round(t_lm / 1e3, 1)),
+      sprintf("weighted lm fit: admixture %.1f generations prior ~ %.1f kya", t_gens_lmw, round(t_lmw / 1e3, 1)),
+      sprintf("MLE fit: admixture %.1f generations prior ~ %.1f kya", t_gens_mean, round(t_mean / 1e3, 1)),
+      sprintf("nls fit: admixture %.1f generations prior ~ %.1f kya", t_gens_nls, round(t_nls / 1e3, 1))
+    )
     
     # plot the results on the original exponential scale (although we fit truncated exponential,
     # the rate corresponds to the shape of the original unfiltered exponential function, so we
