@@ -451,14 +451,14 @@ for (min_length in c(50e3, 100e3)) {
   text(0.5, 0.5, paste("Minimum tract length:", as.integer(min_length), "bp"), cex = 3)
   
   for (sample_age in sort(unique(tracts_df$sample_age))) {
-
+    
     # cat("minimum length:", min_length, "\nsample_age:", sample_age, "\n")
     
     r <- 1e-8
     
     filtered_tracts <- tracts_df %>% filter(sample_age == !!sample_age, length >= min_length, length <= max_length)
-    
-    sample_age <- unique(filtered_tracts$ageAverage) %>% mean()
+    # replace the sample age factor level with the actual numerical age
+    sample_age <- unique(filtered_tracts$ageAverage) %>% mean() %>% round(0)
     
     bin_data <- hist(filtered_tracts$length, plot = FALSE, breaks = 100)
     density <- bin_data$density
@@ -492,16 +492,13 @@ for (min_length in c(50e3, 100e3)) {
     t_mean <- t_gens_mean * gen_time + sample_age
     
     # nls estimate -- computing the rate of decay (lambda) by fitting an exponential curve directly
-    lambda_nls <- tryCatch(
-      {
-        nls_res <- nls(density ~ SSasymp(length, Asym, R0, lrc))
-        # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp
-        exp(unname(coef(nls_res)["lrc"]))
-      },
-      warning = function(w) NA,
-      error = function(e) NA
+    # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp 
+    nls_res <- tryCatch(
+      nls(density ~ SSasymp(length, Asym, R0, lrc)),
+      error = function(e) NA, warning = function(w) NA
     )
-    
+    failed_nls <- !inherits(nls_res, "nls")
+    lambda_nls <- if (failed_nls) NA else exp(unname(coef(nls_res)["lrc"]))
     t_gens_nls <- lambda_nls / r
     t_nls <- t_gens_nls * gen_time + sample_age
     
@@ -510,8 +507,8 @@ for (min_length in c(50e3, 100e3)) {
     
     par(mfrow = c(1, 2))
     
-    title <- sprintf("sample age %d, tract length [%d bp, %f Mb]",
-                     round(sample_age), min_length, max_length / 1e6)
+    title <- sprintf("sample age %.1f, tract length [%d kb, %.1f Mb]",
+                     sample_age, round(min_length / 1e3, 1), round(max_length / 1e6, 1))
     
     legends <-c(sprintf("lm fit of t = %.1f kya", round(t_lm / 1e3, 1)),
                 sprintf("weighted lm fit of t = %.1f kya", round(t_lmw / 1e3, 1)),
@@ -525,7 +522,7 @@ for (min_length in c(50e3, 100e3)) {
     y_lm <- dexp(x_values, rate = lambda_lm)
     y_lmw <- dexp(x_values, rate = lambda_lmw)
     y_mean <- dexp(x_values, rate = lambda_mean)
-    y_nls <- dexp(x_values, rate = lambda_nls)
+    y_nls <- if (failed_nls) NA else predict(nls_res, newdata = data.frame(length = x_values + min_length))
     
     ylim <- c(min(c(density, y_lm, y_lmw, y_mean, y_nls), na.rm = TRUE),
               3e-5) #max(c(density, y_lm, y_mean, y_nls), na.rm = TRUE))
@@ -534,7 +531,8 @@ for (min_length in c(50e3, 100e3)) {
     lines(x_values + min_length, y_lm, col = "purple", lty = 2, lwd = 2)
     lines(x_values + min_length, y_lmw, col = "darksalmon", lty = 2, lwd = 2)
     lines(x_values + min_length, y_mean, col = "blue", lty = 2, lwd = 2)
-    lines(x_values + min_length, y_nls, col = "green", lty = 2, lwd = 2)
+    if (!failed_nls)
+      lines(x_values + min_length, y_nls, col = "green", lty = 2, lwd = 2)
     
     legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = legends)
     
@@ -544,8 +542,8 @@ for (min_length in c(50e3, 100e3)) {
     abline(lm_res, col = "purple", lty = 2, lwd = 2)
     abline(lmw_res, col = "darksalmon", lty = 2, lwd = 2)
     abline(a = log(lambda_mean) + lambda_mean * min_length, b = -lambda_mean, col = "blue", lty = 2, lwd = 2)
-    if (!is.na(lambda_nls))
-      abline(a = log(lambda_nls) + lambda_mean * min_length, b = -lambda_nls, col = "green", lty = 2, lwd = 2)
+    if (!failed_nls)
+      suppressWarnings(lines(x_values, log(y_nls), col = "green", lty = 2, lwd = 2))
     
     legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = legends)
     
@@ -563,8 +561,7 @@ for (min_length in c(50e3, 100e3)) {
       method = c("lm", "lm (weighted)", "MLE", "nls"),
       lambda = c(lambda_lm, lambda_lmw, lambda_mean, lambda_nls),
       rmse_density = c(rmse_lm, rmse_lmw, rmse_mean, rmse_nls),
-      t_inferred = c(t_lm, t_lmw, t_mean, t_nls),
-      ratio_time = t_inferred / t_admix
+      t_inferred = c(t_lm, t_lmw, t_mean, t_nls)
     )
   
   }
@@ -573,4 +570,62 @@ for (min_length in c(50e3, 100e3)) {
 dev.off()
 
 results_df <- do.call(rbind, results)
+```
+
+```{r}
+p_density <- results_df %>%
+  ggplot(aes(as.factor(sample_age), rmse_density, color = method)) +
+    geom_point() +
+    geom_line(aes(group = method)) +
+    theme_bw() +
+    theme(text = element_text(size = 15)) +
+    xlab("sample age [years ago]") +
+    ylab("RMSE observed vs fitted tract length density") +
+    facet_wrap(~ min_length,
+               labeller = labeller(min_length = function(x) paste("minimum segment length =", as.integer(x) / 1e3, "kb"))) +
+    ggtitle("RMSE of a models across sample ages for each method")
+  
+p_density2 <- results_df %>%
+  ggplot(aes(method, rmse_density)) +
+  geom_boxplot(aes(color = method)) +
+  geom_jitter() +
+  theme_bw() +
+  theme(text = element_text(size = 15)) +
+  facet_wrap(
+    ~ min_length,
+    labeller = labeller(min_length = function(x) paste("minimum tract length =", as.integer(x) / 1e3, "kb"))
+  ) +
+  ggtitle("RMSE of a models across fitting methods for all sample ages")
+
+cowplot::plot_grid(p_density, p_density2, nrow = 2)
+```
+
+```{r}
+p_time <- results_df %>%
+  ggplot(aes(as.factor(sample_age), t_inferred, color = method)) +
+  geom_point() +
+  geom_line(aes(group = method)) +
+  geom_hline(yintercept = 55e3, linetype = "dashed") +
+  theme_bw() +
+  theme(text = element_text(size = 15)) +
+  xlab("sample age [years ago]") +
+  ylab("RMSE observed vs fitted tract length density") +
+  facet_wrap(~ min_length,
+             labeller = labeller(min_length = function(x) paste("minimum segment length =", as.integer(x) / 1e3, "kb"))) +
+  ggtitle("Inferred admixture times of a models across sample ages for each method")
+  
+p_time2 <- results_df %>%
+  ggplot(aes(method, t_inferred)) +
+  geom_boxplot(aes(color = method)) +
+  geom_jitter() +
+  geom_hline(yintercept = 55e3, linetype = "dashed") +
+  theme_bw() +
+  theme(text = element_text(size = 15)) +
+  facet_wrap(
+    ~ min_length,
+    labeller = labeller(min_length = function(x) paste("minimum tract length =", as.integer(x) / 1e3, "kb"))
+  ) +
+  ggtitle("Inferred admixture times across fitting methods for all sample ages")
+
+cowplot::plot_grid(p_time, p_time2, nrow = 2)
 ```
