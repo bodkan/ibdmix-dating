@@ -399,7 +399,8 @@ inner_join(
 ```{r}
 metadata <- read_metadata()
 
-metadata$sample_age <- cut(metadata$ageAverage, breaks = c(Inf, 30e3, 25e3, 20e3, 15e3, 10e3, 5e3,  0))
+metadata$sample_age <- cut(metadata$ageAverage,
+                           breaks = c(Inf, 35e3, 30e3, 25e3, 20e3, 15e3, 12e3, 10e3, 5e3,  0))
 
 group_levels <- levels(metadata$sample_age)
 
@@ -412,7 +413,9 @@ metadata <- metadata %>%
 
 ggplot(metadata) +
   geom_jitter(aes(sample_age, ageAverage, color = sample_age)) +
-  theme_bw()
+  theme_bw() +
+  theme(legend.position = "none", text = element_text(size = 15, angle = 45, hjust = 1),
+        axis.title.x = element_text(size = 15, angle = 0, hjust = 0.5))
 ```
 
 ```{r}
@@ -426,6 +429,24 @@ tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metad
 
 tracts_df <- select(metadata, sampleId, ageAverage, sample_age, coverage) %>%
   inner_join(tracts_df, by = c("sampleId" = "ID"))
+```
+
+```{r}
+ggplot() +
+  geom_histogram(
+    data = tracts_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    binwidth = 10000, alpha = 0.75
+  ) +
+  labs(
+    x = "tract length [bp]", y = "density", fill = "age of sample",
+    title = "Tract length distribution as a function of admixed sample's age"
+  ) +
+  scale_x_continuous(labels = scales::comma) +
+  expand_limits(y = 0) +
+  coord_cartesian(ylim = c(0, 2e-5), xlim = c(0, 2e6)) +
+  theme_minimal() +
+  theme(legend.position = "none", text = element_text(size = 15)) +
+  facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age:", x)))
 ```
 
 ```{r}
@@ -609,7 +630,7 @@ p_time <- results_df %>%
   theme_bw() +
   theme(text = element_text(size = 15)) +
   xlab("sample age [years ago]") +
-  ylab("RMSE observed vs fitted tract length density") +
+  ylab("inferred admixture time") +
   facet_wrap(~ min_length,
              labeller = labeller(min_length = function(x) paste("minimum segment length =", as.integer(x) / 1e3, "kb"))) +
   ggtitle("Inferred admixture times of a models across sample ages for each method")
@@ -619,6 +640,7 @@ p_time2 <- results_df %>%
   geom_boxplot(aes(color = method)) +
   geom_jitter() +
   geom_hline(yintercept = 55e3, linetype = "dashed") +
+  ylab("inferred admixture time") +
   theme_bw() +
   theme(text = element_text(size = 15)) +
   facet_wrap(
