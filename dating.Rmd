@@ -75,26 +75,45 @@ tracts_df <- read_tsv("data/sim_tracts.tsv")
 ## Comparison of filtered and unfiltered tract distributions
 
 ```{r}
-min_length <- 50e3
-
 ggplot() +
-  geom_density(data = tracts_df,
-               aes(length, y = after_stat(count), color = factor(sample_age), linetype = "unfiltered")) +
-  geom_density(data = filter(tracts_df, length >= min_length),
-               aes(length, y = after_stat(count), color = factor(sample_age), linetype = "filtered"),
-               color = "black") +
-  guides(color = "none") +
-  labs(linetype = "tracts") +
-  scale_linetype_manual(values = c("unfiltered" = "solid", "filtered" = "dashed")) +
-  facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya"))) +
-  coord_cartesian(xlim = c(0, 1e6))
+  geom_histogram(
+    data = tracts_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    binwidth = 10000, alpha = 0.75
+  ) +
+  labs(
+    x = "tract length [bp]", y = "density", fill = "age of sample",
+    title = "Tract length distribution as a function of admixed sample's age"
+  ) +
+  scale_x_continuous(labels = scales::comma) +
+  expand_limits(y = 0) +
+  coord_cartesian(ylim = c(0, 2e-5)) +
+  theme_minimal() +
+  theme(legend.position = "none", text = element_text(size = 15)) +
+  facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
 ```
+
+<!-- ```{r} -->
+<!-- min_length <- 50e3 -->
+
+<!-- ggplot() + -->
+<!--   geom_density(data = tracts_df, -->
+<!--                aes(length, y = after_stat(count), color = factor(sample_age), linetype = "unfiltered")) + -->
+<!--   geom_density(data = filter(tracts_df, length >= min_length), -->
+<!--                aes(length, y = after_stat(count), color = factor(sample_age), linetype = "filtered"), -->
+<!--                color = "black") + -->
+<!--   guides(color = "none") + -->
+<!--   labs(linetype = "tracts") + -->
+<!--   scale_linetype_manual(values = c("unfiltered" = "solid", "filtered" = "dashed")) + -->
+<!--   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya"))) + -->
+<!--   coord_cartesian(xlim = c(0, 1e6)) + -->
+<!--   theme_bw() -->
+<!-- ``` -->
 
 ## Estimating admixture time from tract lengths
 
 ```{r}
 # sample_age <- 0
-# min_length <- 50e3
+# min_length <- 0
 
 max_length <- Inf
 
@@ -147,16 +166,13 @@ for (min_length in c(0, 50e3, 100e3)) {
     t_mean <- t_gens_mean * gen_time + sample_age
     
     # nls estimate -- computing the rate of decay (lambda) by fitting an exponential curve directly
-    lambda_nls <- tryCatch(
-      {
-        nls_res <- nls(density ~ SSasymp(length, Asym, R0, lrc))
-        # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp
-        exp(unname(coef(nls_res)["lrc"]))
-      },
-      warning = function(w) NA,
-      error = function(e) NA
+    # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp 
+    nls_res <- tryCatch(
+      nls(density ~ SSasymp(length, Asym, R0, lrc)),
+      error = function(e) NA, warning = function(w) NA
     )
-    
+    failed_nls <- !inherits(nls_res, "nls")
+    lambda_nls <- if (failed_nls) NA else exp(unname(coef(nls_res)["lrc"]))
     t_gens_nls <- lambda_nls / r
     t_nls <- t_gens_nls * gen_time + sample_age
     
@@ -165,7 +181,8 @@ for (min_length in c(0, 50e3, 100e3)) {
     
     par(mfrow = c(1, 2))
     
-    title <- sprintf("sample age %d, tract length [%d bp, %f Mb]", sample_age, min_length, max_length / 1e6)
+    title <- sprintf("sample age %d, tract length [%d kb, %.1f Mb]",
+                     sample_age, round(min_length / 1e3, 1), round(max_length / 1e6, 1))
     
     legends <-c(sprintf("lm fit of t = %.1f kya", round(t_lm / 1e3, 1)),
                 sprintf("weighted lm fit of t = %.1f kya", round(t_lmw / 1e3, 1)),
@@ -179,7 +196,7 @@ for (min_length in c(0, 50e3, 100e3)) {
     y_lm <- dexp(x_values, rate = lambda_lm)
     y_lmw <- dexp(x_values, rate = lambda_lmw)
     y_mean <- dexp(x_values, rate = lambda_mean)
-    y_nls <- dexp(x_values, rate = lambda_nls)
+    y_nls <- if (failed_nls) NA else predict(nls_res, newdata = data.frame(length = x_values + min_length))
     
     ylim <- c(min(c(density, y_lm, y_lmw, y_mean, y_nls), na.rm = TRUE),
               3e-5) #max(c(density, y_lm, y_mean, y_nls), na.rm = TRUE))
@@ -188,7 +205,8 @@ for (min_length in c(0, 50e3, 100e3)) {
     lines(x_values + min_length, y_lm, col = "purple", lty = 2, lwd = 2)
     lines(x_values + min_length, y_lmw, col = "darksalmon", lty = 2, lwd = 2)
     lines(x_values + min_length, y_mean, col = "blue", lty = 2, lwd = 2)
-    lines(x_values + min_length, y_nls, col = "green", lty = 2, lwd = 2)
+    if (!failed_nls)
+      lines(x_values + min_length, y_nls, col = "green", lty = 2, lwd = 2)
     
     legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = legends)
     
@@ -198,8 +216,8 @@ for (min_length in c(0, 50e3, 100e3)) {
     abline(lm_res, col = "purple", lty = 2, lwd = 2)
     abline(lmw_res, col = "darksalmon", lty = 2, lwd = 2)
     abline(a = log(lambda_mean) + lambda_mean * min_length, b = -lambda_mean, col = "blue", lty = 2, lwd = 2)
-    if (!is.na(lambda_nls))
-      abline(a = log(lambda_nls) + lambda_mean * min_length, b = -lambda_nls, col = "green", lty = 2, lwd = 2)
+    if (!failed_nls)
+      suppressWarnings(lines(x_values, log(y_nls), col = "green", lty = 2, lwd = 2))
     
     legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = legends)
     
@@ -235,6 +253,7 @@ p_density <- results_df %>%
     geom_point() +
     geom_line(aes(group = method)) +
     theme_bw() +
+    theme(text = element_text(size = 15)) +
     xlab("sample age [years ago]") +
     ylab("RMSE observed vs fitted tract length density") +
     facet_wrap(~ min_length,
@@ -246,6 +265,7 @@ p_time <- results_df %>%
     geom_line(aes(group = method)) +
     geom_hline(yintercept = 1, linetype = "dashed") +
     theme_bw() +
+    theme(text = element_text(size = 15)) +
     xlab("sample age [years ago]") +
     ylab("inferred / true admixture time") +
     facet_wrap(~ min_length,
@@ -253,6 +273,35 @@ p_time <- results_df %>%
 
 cowplot::plot_grid(p_density, p_time, nrow = 2)
 ```
+
+```{r}
+p_density2 <- results_df %>%
+  ggplot(aes(method, rmse_density)) +
+  geom_boxplot(aes(color = method)) +
+  geom_jitter() +
+  expand_limits(y = 0) +
+  theme_bw() +
+  theme(text = element_text(size = 15)) +
+  facet_wrap(
+    ~ min_length,
+    labeller = labeller(min_length = function(x) paste("minimum tract length =", as.integer(x) / 1e3, "kb"))
+  )
+
+p_time2 <- results_df %>%
+  ggplot(aes(method, ratio_time)) +
+  geom_boxplot(aes(color = method)) +
+  geom_jitter() +
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  theme_bw() +
+  theme(text = element_text(size = 15)) +
+  facet_wrap(
+    ~ min_length,
+    labeller = labeller(min_length = function(x) paste("minimum tract length =", as.integer(x) / 1e3, "kb"))
+  )
+
+cowplot::plot_grid(p_density2, p_time2, nrow = 2)
+```
+
 
 
 ## Estimating admixture time from tract lengths v2
@@ -362,7 +411,8 @@ metadata <- metadata %>%
   )
 
 ggplot(metadata) +
-  geom_jitter(aes(sample_age, ageAverage, color = sample_age))
+  geom_jitter(aes(sample_age, ageAverage, color = sample_age)) +
+  theme_bw()
 ```
 
 ```{r}
@@ -381,7 +431,8 @@ tracts_df <- select(metadata, sampleId, ageAverage, sample_age, coverage) %>%
 ```{r}
 ggplot(tracts_df) +
   geom_density(aes(length, color = sample_age)) +
-  coord_cartesian(xlim = c(0, 1e6))
+  coord_cartesian(xlim = c(0, 1e6)) +
+  theme_bw()
 ```
 
 ```{r}
