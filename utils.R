@@ -55,7 +55,7 @@ generate_windows <- function(gaps_gr, window_size, step_size) {
   unlist(windows_grl)
 }
 
-compute_ancestry <- function(tracts_gr, windows_gr) {
+compute_ancestry <- function(tracts_gr, windows_gr, keep_gaps = FALSE) {
   autosomes <- getChromInfoFromUCSC("hg19") %>%
     filter(grepl("chr\\d+$", chrom)) %>%
     mutate(start = 1) %>%
@@ -82,7 +82,8 @@ compute_ancestry <- function(tracts_gr, windows_gr) {
     })
 
     mcols(chrom_gr)$coverage <- average_coverage_per_window
-    mcols(chrom_gr)$coverage[mcols(chrom_gr)$gap] <- NA
+    if (!keep_gaps)
+      mcols(chrom_gr)$coverage[mcols(chrom_gr)$gap] <- NA
 
     chrom_gr
   }, mc.cores = detectCores())

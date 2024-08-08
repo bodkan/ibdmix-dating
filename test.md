@@ -147,7 +147,7 @@ dev.off()
 ### Testing a dedicated function `compute_ancestry()`
 
 ``` r
-ancestry_gr <- compute_ancestry(tracts_gr, windows_gr)
+ancestry_gr <- compute_ancestry(tracts_gr, windows_gr, keep_gaps = TRUE)
 ```
 
 ### Testing code from a dedicated function `plot_desert_ancestry()`
