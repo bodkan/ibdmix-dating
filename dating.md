@@ -81,6 +81,7 @@ ggplot() +
     data = tracts_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
     binwidth = 10000, alpha = 0.75
   ) +
+  geom_density(data = tracts_df, aes(length), alpha = 0.2) +
   labs(
     x = "tract length [bp]", y = "density", fill = "age of sample",
     title = "Tract length distribution as a function of admixed sample's age"
@@ -512,6 +513,7 @@ ggplot() +
     data = tracts_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
     binwidth = 10000, alpha = 0.75
   ) +
+  geom_density(data = tracts_df, aes(length), alpha = 0.2) +
   labs(
     x = "tract length [bp]", y = "density", fill = "age of sample",
     title = "Tract length distribution as a function of admixed sample's age"
