@@ -21,45 +21,6 @@ suppressPackageStartupMessages(source(here::here("utils.R")))
 #> Warning: package 'GenomeInfoDb' was built under R version 4.3.3
 ```
 
-## Fitting exponential decay of truncated distributions
-
-``` r
-set.seed(42)
-
-lambda_true <- 0.1
-
-y_full <- rexp(100000, rate = lambda_true)
-
-hist(y_full, breaks = seq(0, max(y_full), length.out = 100), freq = FALSE)
-```
-
-![](dating_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
-
-``` r
-
-(mean_full <- mean(y_full))
-#> [1] 9.981767
-(lambda_full <- 1 / mean_full)
-#> [1] 0.1001827
-```
-
-``` r
-cutoff <- 5
-y_trunc <- y_full[y_full > cutoff]
-
-h_trunc <- hist(y_trunc, breaks = seq(0, max(y_full), length.out = 100), freq = FALSE)
-
-(mean_trunc <- mean(y_trunc)) - cutoff
-#> [1] 9.997065
-(lambda_trunc <- 1 / (mean_trunc - cutoff))
-#> [1] 0.1000294
-
-x_values <- h_trunc$mids
-lines(x_values + cutoff, dexp(x_values, rate = lambda_trunc), col = "red", lty = "dashed", lwd = 2)
-```
-
-![](dating_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
-
 ## Testing the admixture dating methodology on simulations
 
 ``` r
@@ -84,7 +45,7 @@ samples <- schedule_sampling(model, times = c(50, 40, 30, 20, 10, 0) * 1e3, list
 plot_model(model, proportions = TRUE, order = c("AFR", "EUR", "ancestor", "NEA"))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
 
 ``` r
 ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples = samples, random_seed = 42)
@@ -132,7 +93,7 @@ ggplot() +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
 <!-- ```{r} -->
 <!-- min_length <- 50e3 -->
@@ -319,7 +280,7 @@ p_time <- results_df %>%
 cowplot::plot_grid(p_density, p_time, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
 ``` r
 p_density2 <- results_df %>%
@@ -349,7 +310,7 @@ p_time2 <- results_df %>%
 cowplot::plot_grid(p_density2, p_time2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
 ## Estimating admixture time from tract lengths v2
 
@@ -476,7 +437,7 @@ ggplot(metadata) +
         axis.title.x = element_text(size = 15, angle = 0, hjust = 0.5))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
 ``` r
 metadata %>%
@@ -538,7 +499,7 @@ ggplot() +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age:", x)))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -547,7 +508,7 @@ ggplot(tracts_df) +
   theme_bw()
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ``` r
 # sample_age <- "present-day"
@@ -718,7 +679,7 @@ p_density2 <- results_df %>%
 cowplot::plot_grid(p_density, p_density2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 ``` r
 p_time <- results_df %>%
@@ -751,4 +712,100 @@ p_time2 <- results_df %>%
 cowplot::plot_grid(p_time, p_time2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+
+## Fitting exponential decay of truncated distributions
+
+Exploring the basic modeling techniques used above.
+
+**This is a “complete” exponential distribution.** It has a rate
+parameter $\lambda$ and will have the expected value of $1 / lambda$.
+
+``` r
+set.seed(42)
+
+lambda_true <- 0.1
+(mean_true <- 1 / lambda_true)
+#> [1] 10
+
+x_full <- rexp(100000, rate = lambda_true)
+
+h_full <- hist(x_full, breaks = seq(0, max(x_full), length.out = 100), freq = TRUE)
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+
+We can fit an exponential function using a MLE estimate of $\lambda$,
+which can be computed from an estimate of the mean $\bar{x}$ of the
+observed data as $\hat{\lambda} = \frac{1}{\bar{x}}$:
+
+``` r
+(mean_full <- mean(x_full))
+#> [1] 9.981767
+(lambda_full <- 1 / mean_full)
+#> [1] 0.1001827
+```
+
+We can then plot the fitted exponential over the “observed data” using
+this estimated $\hat{\lambda}$:
+
+``` r
+h_full <- hist(x_full, breaks = seq(0, max(x_full), length.out = 100), freq = TRUE)
+
+x_values <- h_full$mids
+y_values <- dexp(x_values, rate = lambda_full)
+lines(x_values, sum(h_full$counts) * y_values, col = "red", lty = "dashed", lwd = 2)
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+
+Let’s now truncate the observed exponentially-distributed data starting
+from a given cutoff value $c$.
+
+``` r
+c <- 5
+x_trunc <- x_full[x_full > c]
+
+h_trunc <- hist(x_trunc, breaks = seq(0, max(x_full), length.out = 100), ylim = c(0, max(h_full$counts)))
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+
+It turns out that the mean of the original (non-truncated) distribution
+$\bar{x}$ can be estimated from the mean of the truncated data
+$\bar{x}'$ as $\bar{x}' - c$:
+
+``` r
+mean(x_trunc) - c
+#> [1] 9.997065
+```
+
+And, as shown above, because the MLE of the rate $\lambda$ of an
+exponential distribution can be estimated from its mean $\bar{x}$, we
+can estimate the $\lambda$ of the original (non-truncated) distribution
+from the mean $\bar{x}'$ of distribution truncated from $c$ as
+$\hat{\lambda} = \frac{1}{\bar{x}' - c}$:
+
+``` r
+(lambda_hat <- 1 / (mean(x_trunc) - c))
+#> [1] 0.1000294
+```
+
+Let’s verify this by overlaying the exponential curve with the rate
+$\hat{\lambda}$ (i.e. estimated rate of the non-truncated distribution)
+over the truncated data:
+
+``` r
+h_trunc <- hist(x_trunc, breaks = seq(0, max(x_full), length.out = 100), ylim = c(0, max(h_full$counts)))
+
+x_values <- h_trunc$mids
+y_values <- dexp(x_values, rate = lambda_hat)
+lines(x_values + c, sum(h_trunc$counts) * y_values, col = "red", lty = "dashed", lwd = 2)
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+
+Basically, what we’re doing by this is take the truncated distribution
+(truncated from $c$ to the right) as if it was some other non-truncated
+distribution. The fitted line works because we then shift `x_values` to
+the right by `c`.

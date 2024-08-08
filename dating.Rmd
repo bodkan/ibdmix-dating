@@ -15,6 +15,8 @@ knitr::opts_chunk$set(
 )
 
 set.seed(42)
+
+unlink("dating_files", recursive = TRUE)
 ```
 
 ```{r}
@@ -29,35 +31,6 @@ init_env(quiet = TRUE)
 
 suppressPackageStartupMessages(source(here::here("utils.R")))
 ```
-
-## Fitting exponential decay of truncated distributions
-
-```{r}
-set.seed(42)
-
-lambda_true <- 0.1
-
-y_full <- rexp(100000, rate = lambda_true)
-
-hist(y_full, breaks = seq(0, max(y_full), length.out = 100), freq = FALSE)
-
-(mean_full <- mean(y_full))
-(lambda_full <- 1 / mean_full)
-```
-
-```{r}
-cutoff <- 5
-y_trunc <- y_full[y_full > cutoff]
-
-h_trunc <- hist(y_trunc, breaks = seq(0, max(y_full), length.out = 100), freq = FALSE)
-
-(mean_trunc <- mean(y_trunc)) - cutoff
-(lambda_trunc <- 1 / (mean_trunc - cutoff))
-
-x_values <- h_trunc$mids
-lines(x_values + cutoff, dexp(x_values, rate = lambda_trunc), col = "red", lty = "dashed", lwd = 2)
-```
-
 
 ## Testing the admixture dating methodology on simulations
 
@@ -684,3 +657,70 @@ p_time2 <- results_df %>%
 
 cowplot::plot_grid(p_time, p_time2, nrow = 2)
 ```
+
+## Fitting exponential decay of truncated distributions
+
+Exploring the basic modeling techniques used above.
+
+**This is a "complete" exponential distribution.** It has a rate parameter $\lambda$ and will have the expected value of $1 / lambda$.
+
+```{r}
+set.seed(42)
+
+lambda_true <- 0.1
+(mean_true <- 1 / lambda_true)
+
+x_full <- rexp(100000, rate = lambda_true)
+
+h_full <- hist(x_full, breaks = seq(0, max(x_full), length.out = 100), freq = TRUE)
+```
+
+We can fit an exponential function using a MLE estimate of $\lambda$, which can be computed from an estimate of the mean $\bar{x}$ of the observed data as $\hat{\lambda} = \frac{1}{\bar{x}}$:
+
+```{r}
+(mean_full <- mean(x_full))
+(lambda_full <- 1 / mean_full)
+```
+
+We can then plot the fitted exponential over the "observed data" using this estimated $\hat{\lambda}$:
+
+```{r}
+h_full <- hist(x_full, breaks = seq(0, max(x_full), length.out = 100), freq = TRUE)
+
+x_values <- h_full$mids
+y_values <- dexp(x_values, rate = lambda_full)
+lines(x_values, sum(h_full$counts) * y_values, col = "red", lty = "dashed", lwd = 2)
+```
+
+Let's now truncate the observed exponentially-distributed data starting from a given cutoff value $c$.
+
+```{r}
+c <- 5
+x_trunc <- x_full[x_full > c]
+
+h_trunc <- hist(x_trunc, breaks = seq(0, max(x_full), length.out = 100), ylim = c(0, max(h_full$counts)))
+```
+
+It turns out that the mean of the original (non-truncated) distribution $\bar{x}$ can be estimated from the mean of the truncated data $\bar{x}'$ as $\bar{x}' - c$:
+
+```{r}
+mean(x_trunc) - c
+```
+
+And, as shown above, because the MLE of the rate $\lambda$ of an exponential distribution can be estimated from its mean $\bar{x}$, we can estimate the $\lambda$ of the original (non-truncated) distribution from the mean $\bar{x}'$ of distribution truncated from $c$ as $\hat{\lambda} = \frac{1}{\bar{x}' - c}$:
+
+```{r}
+(lambda_hat <- 1 / (mean(x_trunc) - c))
+```
+
+Let's verify this by overlaying the exponential curve with the rate $\hat{\lambda}$ (i.e. estimated rate of the non-truncated distribution) over the truncated data:
+
+```{r}
+h_trunc <- hist(x_trunc, breaks = seq(0, max(x_full), length.out = 100), ylim = c(0, max(h_full$counts)))
+
+x_values <- h_trunc$mids
+y_values <- dexp(x_values, rate = lambda_hat)
+lines(x_values + c, sum(h_trunc$counts) * y_values, col = "red", lty = "dashed", lwd = 2)
+```
+
+Basically, what we're doing by this is take the truncated distribution (truncated from $c$ to the right) as if it was some other non-truncated distribution. The fitted line works because we then shift `x_values` to the right by `c`.
