@@ -764,7 +764,7 @@ h_full <- hist(x_full, breaks = seq(0, max(x_full), length.out = 100), freq = TR
 
 We can fit an exponential function using a MLE estimate of $\lambda$,
 which can be computed from an estimate of the mean $\bar{x}$ of the
-observed data as $\hat{\lambda} = \frac{1}{\bar{x}}$:
+observed data as $\hat{\lambda} = 1 / \bar{x}$:
 
 ``` r
 (mean_full <- mean(x_full))
@@ -811,7 +811,7 @@ And, as shown above, because the MLE of the rate $\lambda$ of an
 exponential distribution can be estimated from its mean $\bar{x}$, we
 can estimate the $\lambda$ of the original (non-truncated) distribution
 from the mean $\bar{x}'$ of distribution truncated from $c$ as
-$\hat{\lambda} = \frac{1}{\bar{x}' - c}$:
+$\hat{\lambda} = 1 / (\bar{x}' - c)$:
 
 ``` r
 (lambda_hat <- 1 / (mean(x_trunc) - c))
