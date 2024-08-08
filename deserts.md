@@ -18,7 +18,7 @@ source(here::here("utils.R"))
 ```
 
 ``` r
-# IBDmix desert coordinates from Table S8 of Chan et al., 202 ---------------------------------
+# IBDmix desert coordinates from Table S8 of Chan et al., 202
 # (https://ars.els-cdn.com/content/image/1-s2.0-S0092867420300593-mmc1.pdf)
 # (https://ars.els-cdn.com/content/image/1-s2.0-S0092867420300593-figs4_lrg.jpg)
 
@@ -30,11 +30,18 @@ deserts_df <- tribble(
   "chr8", 53900000,  66000000,  49400000,      66500000
 ) %>% pivot_longer(cols = c(starts_with("start_"), starts_with("end_")),
                    names_to = c(".value", "method"), names_sep = "_")
+
+# convert S* and IBDmix coordinates above into GRanges objects
+ss_deserts_gr <- filter(deserts_df, method == "ss") %>% makeGRangesFromDataFrame()
+ibdmix_deserts_gr <- filter(deserts_df, method == "ibdmix") %>% makeGRangesFromDataFrame()
+
+# get intersect of Neanderthal-only deserts inferred by both methods
+deserts_gr <- pintersect(ss_deserts_gr, ibdmix_deserts_gr)
 ```
 
 ``` r
-# combined Neanderthal and Denisovan deserts
-# (https://www.science.org/doi/suppl/10.1126/science.aad9416/suppl_file/vernot-sm.pdf)
+# combined Neanderthal and Denisovan deserts -- Table S9 on page 51 of
+# https://www.science.org/doi/suppl/10.1126/science.aad9416/suppl_file/vernot-sm.pdf
 ss2_deserts_gr <- tribble(
   ~chrom, ~start, ~end,
   "chr1", 104000000, 114900000,
@@ -42,18 +49,17 @@ ss2_deserts_gr <- tribble(
   "chr7", 113600000, 124700000,
   "chr8", 54500000, 65400000
 ) %>% makeGRangesFromDataFrame()
+
+# get intersect of S* Neanderthal AND Denisovan deserts and IBDmix Neanderthal deserts
+deserts2_gr <- pintersect(ss2_deserts_gr, ibdmix_deserts_gr)
 ```
 
 ``` r
-ss_deserts_gr <- filter(deserts_df, method == "ss") %>% makeGRangesFromDataFrame()
-ibdmix_deserts_gr <- filter(deserts_df, method == "ibdmix") %>% makeGRangesFromDataFrame()
-deserts_gr <- pintersect(ss_deserts_gr, ibdmix_deserts_gr)
-deserts2_gr <- pintersect(ss2_deserts_gr, ibdmix_deserts_gr)
-
 ss_deserts_gr$width <- width(ss_deserts_gr) / 1e6
-ss2_deserts_gr$width <- width(ss2_deserts_gr) / 1e6
 ibdmix_deserts_gr$width <- width(ibdmix_deserts_gr) / 1e6
 deserts_gr$width <- width(deserts_gr) / 1e6
+
+ss2_deserts_gr$width <- width(ss2_deserts_gr) / 1e6
 deserts2_gr$width <- width(deserts2_gr) / 1e6
 ```
 
@@ -66,16 +72,6 @@ ss_deserts_gr
 #>   [2]     chr3   76500000-90500000      * |      14.0
 #>   [3]     chr7 106300000-124700000      * |      18.4
 #>   [4]     chr8   53900000-66000000      * |      12.1
-#>   -------
-#>   seqinfo: 4 sequences from an unspecified genome; no seqlengths
-ss2_deserts_gr
-#> GRanges object with 4 ranges and 1 metadata column:
-#>       seqnames              ranges strand |     width
-#>          <Rle>           <IRanges>  <Rle> | <numeric>
-#>   [1]     chr1 104000000-114900000      * |      10.9
-#>   [2]     chr3   76500000-90500000      * |      14.0
-#>   [3]     chr7 113600000-124700000      * |      11.1
-#>   [4]     chr8   54500000-65400000      * |      10.9
 #>   -------
 #>   seqinfo: 4 sequences from an unspecified genome; no seqlengths
 ibdmix_deserts_gr
@@ -98,6 +94,17 @@ deserts_gr
 #>   [4]     chr8   53900000-66000000      * |      TRUE      12.1
 #>   -------
 #>   seqinfo: 4 sequences from an unspecified genome; no seqlengths
+
+ss2_deserts_gr
+#> GRanges object with 4 ranges and 1 metadata column:
+#>       seqnames              ranges strand |     width
+#>          <Rle>           <IRanges>  <Rle> | <numeric>
+#>   [1]     chr1 104000000-114900000      * |      10.9
+#>   [2]     chr3   76500000-90500000      * |      14.0
+#>   [3]     chr7 113600000-124700000      * |      11.1
+#>   [4]     chr8   54500000-65400000      * |      10.9
+#>   -------
+#>   seqinfo: 4 sequences from an unspecified genome; no seqlengths
 deserts2_gr
 #> GRanges object with 4 ranges and 2 metadata columns:
 #>       seqnames              ranges strand |       hit     width
@@ -110,15 +117,20 @@ deserts2_gr
 #>   seqinfo: 4 sequences from an unspecified genome; no seqlengths
 ```
 
+In the visualizations below, we will define archaic deserts as the
+intersection of Neanderthal deserts obtained from S\* and Neanderthal
+deserts obtained by IBDmix:
+
 ``` r
-deserts_gr <- deserts2_gr
+# deserts_gr <- deserts2_gr
+
 desert_coords <- deserts_gr %>% as.data.frame() %>% select(chrom = seqnames, start, end)
 desert_coords
 #>   chrom     start       end
 #> 1  chr1 105400000 114900000
 #> 2  chr3  76500000  89300000
-#> 3  chr7 113600000 123200000
-#> 4  chr8  54500000  65400000
+#> 3  chr7 106300000 123200000
+#> 4  chr8  53900000  66000000
 ```
 
 ## Load and inspect GeoGenetics metadata
@@ -137,7 +149,7 @@ metadata <- read_metadata()
 
 ``` r
 glimpse(metadata)
-#> Rows: 1,773
+#> Rows: 1,772
 #> Columns: 32
 #> $ sampleId         <chr> "NA20502", "NA20503", "NA20504", "NA20505", "NA20506"…
 #> $ popId            <chr> "TSI", "TSI", "TSI", "TSI", "TSI", "TSI", "TSI", "TSI…
@@ -156,9 +168,9 @@ glimpse(metadata)
 #> $ age14C           <dbl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, N…
 #> $ ageHigh          <dbl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, N…
 #> $ ageLow           <dbl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, N…
-#> $ ageAverage       <dbl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, N…
+#> $ ageAverage       <dbl> 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,…
 #> $ datingSource     <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, N…
-#> $ coverage         <dbl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, N…
+#> $ coverage         <dbl> Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf, Inf…
 #> $ sex              <chr> "XX", "XX", "XX", "XX", "XX", "XX", "XX", "XY", "XY",…
 #> $ hgMT             <chr> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, N…
 #> $ gpAvg            <dbl> NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, NA, N…
@@ -232,7 +244,10 @@ metadata %>%
 ## Inspect Neanderthal tracts in ancient and present-day individuals
 
 ``` r
-tracts_modern <- read_tracts("Modern", metadata)
+tracts <- rbind(
+  read_tracts("Modern", metadata),
+  read_tracts("Ancient", metadata)
+)
 #> Rows: 1272453 Columns: 26
 #> ── Column specification ────────────────────────────────────────────────────────
 #> Delimiter: "\t"
@@ -242,7 +257,6 @@ tracts_modern <- read_tracts("Modern", metadata)
 #> 
 #> ℹ Use `spec()` to retrieve the full column specification for this data.
 #> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
-tracts_ancient <- read_tracts("Ancient", metadata)
 #> Rows: 1272453 Columns: 26
 #> ── Column specification ────────────────────────────────────────────────────────
 #> Delimiter: "\t"
@@ -252,54 +266,41 @@ tracts_ancient <- read_tracts("Ancient", metadata)
 #> 
 #> ℹ Use `spec()` to retrieve the full column specification for this data.
 #> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
-
-tracts <- rbind(tracts_modern, tracts_ancient)
 
 tracts
-#> # A tibble: 706,441 × 5
-#>    ID      chrom     start       end set   
-#>    <chr>   <chr>     <dbl>     <dbl> <chr> 
-#>  1 HG00096 chr2  230587448 230666898 Modern
-#>  2 HG00096 chr10  64618340  64832999 Modern
-#>  3 HG00096 chr4   27175143  27250293 Modern
-#>  4 HG00096 chr4   10555535  10667610 Modern
-#>  5 HG00096 chr4   13699206  13788189 Modern
-#>  6 HG00096 chr2  220777562 220862409 Modern
-#>  7 HG00096 chr4    5744094   5795412 Modern
-#>  8 HG00096 chr10  59975686  60034981 Modern
-#>  9 HG00096 chr10  61792790  61851906 Modern
-#> 10 HG00096 chr2  227251112 227379627 Modern
+#> # A tibble: 706,441 × 6
+#>    ID      chrom     start       end length set   
+#>    <chr>   <chr>     <dbl>     <dbl>  <dbl> <chr> 
+#>  1 HG00096 chr2  230587448 230666898  79450 Modern
+#>  2 HG00096 chr10  64618340  64832999 214659 Modern
+#>  3 HG00096 chr4   27175143  27250293  75150 Modern
+#>  4 HG00096 chr4   10555535  10667610 112075 Modern
+#>  5 HG00096 chr4   13699206  13788189  88983 Modern
+#>  6 HG00096 chr2  220777562 220862409  84847 Modern
+#>  7 HG00096 chr4    5744094   5795412  51318 Modern
+#>  8 HG00096 chr10  59975686  60034981  59295 Modern
+#>  9 HG00096 chr10  61792790  61851906  59116 Modern
+#> 10 HG00096 chr2  227251112 227379627 128515 Modern
 #> # ℹ 706,431 more rows
 ```
 
 ``` r
-tracts %>%
-filter(chrom %in% as.character(seqnames(deserts_gr))) %>%
-ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
-  geom_segment(linewidth = 1) +
-  geom_rect(data = desert_coords, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
-  geom_vline(data = desert_coords, aes(xintercept = start), linetype = "dashed", color = "red") +
-  geom_vline(data = desert_coords, aes(xintercept = end), linetype = "dashed", color = "red") +
-  labs(x = "position along a chromosome [bp]", y = "each row = tracts in an individual") +
-  theme_bw() +
-  theme(
-    axis.text.y = element_blank(),
-    axis.ticks = element_blank(),
-    panel.border = element_blank(),
-    panel.grid = element_blank()
-  ) +
-  scale_x_continuous(labels = scales::comma) +
-  facet_grid(set ~ chrom, scales = "free") +
-  ggtitle("Neanderthal tracts in Eurasians")
+tracts_df <- select(metadata, sampleId, ageAverage, coverage) %>% inner_join(tracts, by = c("sampleId" = "ID"))
+
+tracts_df$age_group <- cut(
+  tracts_df$ageAverage,
+  breaks = c(Inf, 20e3, 10e3, 5e3, 100, 0),
+)
+
+group_levels <- levels(tracts_df$age_group)
+
+tracts_df <- tracts_df %>%
+  mutate(
+    age_group = as.character(age_group),
+    age_group = ifelse(is.na(age_group), "present-day", age_group),
+    age_group = factor(age_group, levels = c("present-day", group_levels))
+  )
 ```
-
-![](deserts_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
-
-``` r
-ggplot2::ggsave(paste0("deserts_1+3+7+8.pdf"), width = 13, height = 7)
-```
-
-## Analysis of tracts inferred in real data
 
 Convert the IBDmix tracts data frame to `GRanges`:
 
@@ -328,20 +329,33 @@ seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlength
 genome(tracts_gr) <- "hg19"
 
 tracts_gr
-#> GRanges object with 706441 ranges and 2 metadata columns:
-#>            seqnames              ranges strand |          ID         set
-#>               <Rle>           <IRanges>  <Rle> | <character> <character>
-#>        [1]     chr2 230587448-230666898      * |     HG00096      Modern
-#>        [2]    chr10   64618340-64832999      * |     HG00096      Modern
-#>        [3]     chr4   27175143-27250293      * |     HG00096      Modern
-#>        [4]     chr4   10555535-10667610      * |     HG00096      Modern
-#>        [5]     chr4   13699206-13788189      * |     HG00096      Modern
-#>        ...      ...                 ...    ... .         ...         ...
-#>   [706437]    chr10 133049787-133108620      * |     YGS-B-2     Ancient
-#>   [706438]     chr7 128914309-129062633      * |     YGS-B-2     Ancient
-#>   [706439]    chr12   95113121-95323772      * |     YGS-B-2     Ancient
-#>   [706440]     chr3   28709795-28766423      * |     YGS-B-2     Ancient
-#>   [706441]    chr12   96050068-96129227      * |     YGS-B-2     Ancient
+#> GRanges object with 706441 ranges and 3 metadata columns:
+#>            seqnames              ranges strand |          ID    length
+#>               <Rle>           <IRanges>  <Rle> | <character> <numeric>
+#>        [1]     chr2 230587448-230666898      * |     HG00096     79450
+#>        [2]    chr10   64618340-64832999      * |     HG00096    214659
+#>        [3]     chr4   27175143-27250293      * |     HG00096     75150
+#>        [4]     chr4   10555535-10667610      * |     HG00096    112075
+#>        [5]     chr4   13699206-13788189      * |     HG00096     88983
+#>        ...      ...                 ...    ... .         ...       ...
+#>   [706437]    chr10 133049787-133108620      * |     YGS-B-2     58833
+#>   [706438]     chr7 128914309-129062633      * |     YGS-B-2    148324
+#>   [706439]    chr12   95113121-95323772      * |     YGS-B-2    210651
+#>   [706440]     chr3   28709795-28766423      * |     YGS-B-2     56628
+#>   [706441]    chr12   96050068-96129227      * |     YGS-B-2     79159
+#>                    set
+#>            <character>
+#>        [1]      Modern
+#>        [2]      Modern
+#>        [3]      Modern
+#>        [4]      Modern
+#>        [5]      Modern
+#>        ...         ...
+#>   [706437]     Ancient
+#>   [706438]     Ancient
+#>   [706439]     Ancient
+#>   [706440]     Ancient
+#>   [706441]     Ancient
 #>   -------
 #>   seqinfo: 22 sequences from hg19 genome
 ```
@@ -411,12 +425,43 @@ gaps_gr %>%
 #> generated.
 ```
 
+![](deserts_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+
+``` r
+subtracts_df <- tracts %>% filter(chrom %in% as.character(seqnames(deserts_gr)))
+subgaps_df <- gaps_gr %>% as_tibble() %>% dplyr::rename(chrom = seqnames) %>% filter(chrom %in% as.character(seqnames(deserts_gr)))
+
+ggplot() +
+  geom_segment(subtracts_df, aes(x = start, xend = end, y = ID, yend = ID), linewidth = 1, color = "darkblue") +
+  geom_rect(data = desert_coords, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf),
+            inherit.aes = FALSE, fill = "red", alpha = 0.1) +
+  geom_rect(data = subgaps_df, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf),
+            inherit.aes = FALSE, fill = "black") +
+  geom_vline(data = desert_coords, aes(xintercept = start), linetype = "dashed", color = "red") +
+  geom_vline(data = desert_coords, aes(xintercept = end), linetype = "dashed", color = "red") +
+  labs(x = "position along a chromosome [bp]", y = "each row = tracts in an individual") +
+  theme_bw() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    panel.border = element_blank(),
+    panel.grid = element_blank()
+  ) +
+  scale_x_continuous(labels = scales::comma) +
+  facet_grid(set ~ chrom, scales = "free") +
+  ggtitle("Neanderthal tracts in Eurasians")
+```
+
 ![](deserts_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+
+``` r
+ggplot2::ggsave(paste0("deserts_1+3+7+8.pdf"), width = 13, height = 7)
+```
 
 ### Analyse tracts in windows
 
 ``` r
-windows_gr <- generate_windows(gaps_gr, window_size = 200e3, step_size = 50e3)
+windows_gr <- generate_windows(gaps_gr, window_size = 100e3, step_size = 50e3)
 # windows_gr <- filter(windows_gr, seqnames == "chr7")
 
 # mark windows falling within archaic deserts
@@ -431,56 +476,71 @@ ancestry_gr$modern <- ancestry_modern_gr$coverage
 ancestry_gr$ancient <- ancestry_ancient_gr$coverage
 
 ancestry_gr
-#> GRanges object with 57567 ranges and 5 metadata columns:
+#> GRanges object with 57611 ranges and 5 metadata columns:
 #>           seqnames            ranges strand |  midpoint       gap within_desert
 #>              <Rle>         <IRanges>  <Rle> | <numeric> <logical>     <logical>
-#>       [1]     chr1          1-200000      * |    100000      TRUE         FALSE
-#>       [2]     chr1      50001-250000      * |    150000      TRUE         FALSE
-#>       [3]     chr1     100001-300000      * |    200000      TRUE         FALSE
-#>       [4]     chr1     150001-350000      * |    250000      TRUE         FALSE
-#>       [5]     chr1     200001-400000      * |    300000      TRUE         FALSE
+#>       [1]     chr1          1-100000      * |   50000.5      TRUE         FALSE
+#>       [2]     chr1      50001-150000      * |  100000.5     FALSE         FALSE
+#>       [3]     chr1     100001-200000      * |  150000.5      TRUE         FALSE
+#>       [4]     chr1     150001-250000      * |  200000.5      TRUE         FALSE
+#>       [5]     chr1     200001-300000      * |  250000.5      TRUE         FALSE
 #>       ...      ...               ...    ... .       ...       ...           ...
-#>   [57563]    chr22 50950001-51150000      * |  51050000     FALSE         FALSE
-#>   [57564]    chr22 51000001-51200000      * |  51100000     FALSE         FALSE
-#>   [57565]    chr22 51050001-51250000      * |  51150000      TRUE         FALSE
-#>   [57566]    chr22 51100001-51300000      * |  51200000      TRUE         FALSE
-#>   [57567]    chr22 51150001-51304566      * |  51227284      TRUE         FALSE
-#>              modern    ancient
-#>           <numeric>  <numeric>
-#>       [1]         0          0
-#>       [2]         0          0
-#>       [3]         0          0
-#>       [4]         0          0
-#>       [5]         0          0
-#>       ...       ...        ...
-#>   [57563] 0.0204461 0.01162623
-#>   [57564] 0.0204461 0.01138138
-#>   [57565] 0.0203071 0.01102865
-#>   [57566] 0.0127992 0.00683655
-#>   [57567] 0.0000000 0.00000000
+#>   [57607]    chr22 51050001-51150000      * |  51100000     FALSE         FALSE
+#>   [57608]    chr22 51100001-51200000      * |  51150000     FALSE         FALSE
+#>   [57609]    chr22 51150001-51250000      * |  51200000      TRUE         FALSE
+#>   [57610]    chr22 51200001-51300000      * |  51250000      TRUE         FALSE
+#>   [57611]    chr22 51250001-51304566      * |  51277284      TRUE         FALSE
+#>              modern   ancient
+#>           <numeric> <numeric>
+#>       [1]        NA        NA
+#>       [2]         0         0
+#>       [3]        NA        NA
+#>       [4]        NA        NA
+#>       [5]        NA        NA
+#>       ...       ...       ...
+#>   [57607] 0.0406143 0.0220573
+#>   [57608] 0.0255985 0.0136731
+#>   [57609]        NA        NA
+#>   [57610]        NA        NA
+#>   [57611]        NA        NA
 #>   -------
 #>   seqinfo: 22 sequences from hg19 genome
 ```
 
-``` r
-filter(ancestry_gr, within_desert) %>% as_tibble() %>%
-  group_by(seqnames) %>%
-  summarise(mean(ancient), mean(modern))
-#> # A tibble: 4 × 3
-#>   seqnames `mean(ancient)` `mean(modern)`
-#>   <fct>              <dbl>          <dbl>
-#> 1 chr1            0.00230        0.00231 
-#> 2 chr3            0.00100        0.000963
-#> 3 chr7            0.000420       0.000286
-#> 4 chr8            0.00458        0.00542
-```
+Average Neanderthal ancestry proportion across all windows in ancient
+and present-day individuals:
 
 ``` r
-ancestry_gr %>% as_tibble() %>% summarise(mean(ancient), mean(modern))
+ancestry_gr %>%
+  as_tibble() %>%
+  summarise(
+    neand_ancient = mean(ancient, na.rm = TRUE),
+    neand_modern = mean(modern, na.rm = TRUE)
+  )
 #> # A tibble: 1 × 2
-#>   `mean(ancient)` `mean(modern)`
-#>             <dbl>          <dbl>
-#> 1          0.0206         0.0206
+#>   neand_ancient neand_modern
+#>           <dbl>        <dbl>
+#> 1        0.0221       0.0221
+```
+
+Average Neanderthal ancestry proportion across all windows in ancient
+and present-day individuals **within desert regions**:
+
+``` r
+filter(ancestry_gr, within_desert) %>%
+  as_tibble() %>%
+  group_by(seqnames) %>%
+  summarise(
+    desert_ancient = mean(ancient, na.rm = TRUE),
+    desert_modern = mean(modern, na.rm = TRUE)
+  )
+#> # A tibble: 4 × 3
+#>   seqnames desert_ancient desert_modern
+#>   <fct>             <dbl>         <dbl>
+#> 1 chr1            0.00158      0.00167 
+#> 2 chr3            0.00101      0.000966
+#> 3 chr7            0.00492      0.00414 
+#> 4 chr8            0.00436      0.00513
 ```
 
 ``` r
@@ -501,62 +561,62 @@ ancestry_gr %>%
 #> # A tibble: 3 × 3
 #>   chrom name                                               `proportion of sites`
 #>   <chr> <chr>                                                              <dbl>
-#> 1 chr1  mean(ancient == 0 & modern > 0)                                   0.0309
-#> 2 chr1  mean(ancient > 0 & modern == 0)                                   0.0206
-#> 3 chr1  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.948 
+#> 1 chr1  mean(ancient == 0 & modern > 0)                                   0.0208
+#> 2 chr1  mean(ancient > 0 & modern == 0)                                   0.0156
+#> 3 chr1  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.964 
 #> 
 #> $chr3
 #> # A tibble: 3 × 3
 #>   chrom name                                               `proportion of sites`
 #>   <chr> <chr>                                                              <dbl>
-#> 1 chr3  mean(ancient == 0 & modern > 0)                                   0.0192
-#> 2 chr3  mean(ancient > 0 & modern == 0)                                   0.0231
-#> 3 chr3  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.958 
+#> 1 chr3  mean(ancient == 0 & modern > 0)                                   0.0116
+#> 2 chr3  mean(ancient > 0 & modern == 0)                                   0.0155
+#> 3 chr3  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.973 
 #> 
 #> $chr7
 #> # A tibble: 3 × 3
 #>   chrom name                                               `proportion of sites`
 #>   <chr> <chr>                                                              <dbl>
 #> 1 chr7  mean(ancient == 0 & modern > 0)                                   0     
-#> 2 chr7  mean(ancient > 0 & modern == 0)                                   0.0255
-#> 3 chr7  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.974 
+#> 2 chr7  mean(ancient > 0 & modern == 0)                                   0.0294
+#> 3 chr7  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.971 
 #> 
 #> $chr8
 #> # A tibble: 3 × 3
 #>   chrom name                                               `proportion of sites`
 #>   <chr> <chr>                                                              <dbl>
-#> 1 chr8  mean(ancient == 0 & modern > 0)                                   0.0315
-#> 2 chr8  mean(ancient > 0 & modern == 0)                                   0     
-#> 3 chr8  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.968
-```
-
-``` r
-ancestry_gr %>% filter(within_desert) %>% filter(modern == 0) %>% { .$ancient * 100 } %>% summary()
-#>     Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
-#> 0.000000 0.000000 0.000000 0.002004 0.000000 0.178234
+#> 1 chr8  mean(ancient == 0 & modern > 0)                                   0.0205
+#> 2 chr8  mean(ancient > 0 & modern == 0)                                   0.0123
+#> 3 chr8  mean((ancient == 0 & modern == 0) | (ancient > 0 …                0.967
 ```
 
 ``` r
 pdf("deserts_comparison.pdf", width = 12, height = 8)
 
 for (chrom in as.character(unique(seqnames(deserts_gr)))) {
+  print(plot_desert_ancestry(ancestry_gr, deserts_gr, chrom, full = TRUE))
+
   p1 <- plot_desert_ancestry(ancestry_gr, deserts_gr, chrom)
   p2 <- plot_desert_correlation(ancestry_gr, chrom)
   
-  print(cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7)))
+  suppressWarnings(print(cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 1))))
 }
-#> `geom_smooth()` using formula = 'y ~ x'
-#> Warning: Removed 4 rows containing missing values or values outside the scale range
-#> (`geom_point()`).
-#> `geom_smooth()` using formula = 'y ~ x'
 #> Warning: Removed 3 rows containing missing values or values outside the scale range
-#> (`geom_point()`).
-#> `geom_smooth()` using formula = 'y ~ x'
-#> Warning: Removed 1 row containing missing values or values outside the scale range
-#> (`geom_point()`).
-#> `geom_smooth()` using formula = 'y ~ x'
+#> (`geom_line()`).
+#> Removed 3 rows containing missing values or values outside the scale range
+#> (`geom_line()`).
+#> Warning: Removed 4 rows containing missing values or values outside the scale range
+#> (`geom_line()`).
+#> Removed 4 rows containing missing values or values outside the scale range
+#> (`geom_line()`).
 #> Warning: Removed 2 rows containing missing values or values outside the scale range
-#> (`geom_point()`).
+#> (`geom_line()`).
+#> Removed 2 rows containing missing values or values outside the scale range
+#> (`geom_line()`).
+#> Warning: Removed 3 rows containing missing values or values outside the scale range
+#> (`geom_line()`).
+#> Removed 3 rows containing missing values or values outside the scale range
+#> (`geom_line()`).
 
 dev.off()
 #> quartz_off_screen 
@@ -567,73 +627,16 @@ dev.off()
 p1 <- plot_desert_ancestry(ancestry_gr, deserts_gr, "chr7")
 p2 <- plot_desert_correlation(ancestry_gr, "chr7")
 
-cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 0.7))
-#> `geom_smooth()` using formula = 'y ~ x'
+cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 1))
 #> Warning: Removed 1 row containing missing values or values outside the scale range
 #> (`geom_point()`).
 ```
 
 ![](deserts_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
-## Comparison of tracts between ancient and present-day humans
+## A couple of diagnostics and sanity checks
 
-``` r
-tracts_df <- select(metadata, sampleId, ageAverage) %>% inner_join(tracts, by = c("sampleId" = "ID"))
-tracts_df$width <- tracts_df$end - tracts_df$start
-tracts_df$ageAverage <- ifelse(is.na(tracts_df$ageAverage), 0, tracts_df$ageAverage)
-
-tracts_df$age_group <- cut(
-  tracts_df$ageAverage,
-  breaks = c(Inf, 20e3, 10e3, 5e3, 100, 0),
-)
-
-group_levels <- levels(tracts_df$age_group)
-
-tracts_df <- tracts_df %>%
-  mutate(
-    age_group = as.character(age_group),
-    age_group = ifelse(is.na(age_group), "present-day", age_group),
-    age_group = factor(age_group, levels = c("present-day", group_levels))
-  )
-```
-
-``` r
-group_by(tracts_df, age_group) %>%
-  summarise(mean(width), min(width), max(width))
-#> # A tibble: 5 × 4
-#>   age_group     `mean(width)` `min(width)` `max(width)`
-#>   <fct>                 <dbl>        <dbl>        <dbl>
-#> 1 present-day         134987.        50000      6089550
-#> 2 (100,5e+03]         136335.        50000      6080785
-#> 3 (5e+03,1e+04]       139766.        50000      6527040
-#> 4 (1e+04,2e+04]       144052.        50007      2228427
-#> 5 (2e+04,Inf]         210207.        50010      5347136
-```
-
-``` r
-ggplot(tracts_df) +
-  geom_density(aes(width, color = age_group)) +
-  scale_x_log10()
-```
-
-![](deserts_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
-
-``` r
-ggplot(tracts_df) +
-  geom_boxplot(aes(age_group, width, color = age_group))
-```
-
-![](deserts_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
-
-``` r
-ggplot(tracts_df) +
-  geom_boxplot(aes(age_group, width, color = age_group)) +
-  coord_cartesian(ylim = c(50e3, 250e3)) 
-```
-
-![](deserts_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
-
-## Chen *et al.* tracts
+### Chen *et al.* tracts
 
 ``` r
 chen_tracts <- read_tsv("data/Chen et al. - Neanderthal sequence in 1000 genome.50kb.txt") %>%
@@ -651,30 +654,29 @@ chen_tracts <- read_tsv("data/Chen et al. - Neanderthal sequence in 1000 genome.
 ```
 
 ``` r
-all_tracts <- tracts %>%
-  filter(set == "Modern") %>%
-  bind_rows(chen_tracts) %>% 
-  filter(chrom == "chr1")
+all_tracts <- bind_rows(tracts, chen_tracts)
 ```
 
 ``` r
 group_by(all_tracts, set) %>% tally()
-#> # A tibble: 2 × 2
-#>   set             n
-#>   <chr>       <int>
-#> 1 Chen et al. 22308
-#> 2 Modern      18737
+#> # A tibble: 3 × 2
+#>   set              n
+#>   <chr>        <int>
+#> 1 Ancient     485133
+#> 2 Chen et al. 215291
+#> 3 Modern      221308
 ```
 
 ### Comparison of Chen *at al.*’s and Alba’s results
 
 ``` r
 all_tracts %>%
+filter(set != "Ancient", chrom %in% as.character(unique(seqnames(deserts_gr)))) %>%
 ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
   geom_segment(linewidth = 1) +
-  geom_rect(data = filter(desert_coords, chrom == "chr1"), aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
-  geom_vline(data = filter(desert_coords, chrom == "chr1"), aes(xintercept = start), linetype = "dashed", color = "red") +
-  geom_vline(data = filter(desert_coords, chrom == "chr1"), aes(xintercept = end), linetype = "dashed", color = "red") +
+  geom_rect(data = desert_coords, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), inherit.aes = FALSE, fill = "red", alpha = 0.1) +
+  geom_vline(data = desert_coords, aes(xintercept = start), linetype = "dashed", color = "red") +
+  geom_vline(data = desert_coords, aes(xintercept = end), linetype = "dashed", color = "red") +
   labs(x = "position along a chromosome [bp]", y = "each row = tracts in an individual") +
   theme_bw() +
   theme(
@@ -688,7 +690,7 @@ ggplot(aes(x = start, xend = end, y = ID, yend = ID)) +
   ggtitle("Neanderthal tracts in Eurasians")
 ```
 
-![](deserts_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+![](deserts_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ### Deserts in the Chen *et al.* data
 
@@ -723,39 +725,73 @@ ancestry_chen_gr <- chen_gr %>% compute_ancestry(windows_gr)
 ancestry_gr$chen <- ancestry_chen_gr$coverage
 
 ancestry_gr
-#> GRanges object with 57567 ranges and 6 metadata columns:
+#> GRanges object with 57611 ranges and 6 metadata columns:
 #>           seqnames            ranges strand |  midpoint       gap within_desert
 #>              <Rle>         <IRanges>  <Rle> | <numeric> <logical>     <logical>
-#>       [1]     chr1          1-200000      * |    100000      TRUE         FALSE
-#>       [2]     chr1      50001-250000      * |    150000      TRUE         FALSE
-#>       [3]     chr1     100001-300000      * |    200000      TRUE         FALSE
-#>       [4]     chr1     150001-350000      * |    250000      TRUE         FALSE
-#>       [5]     chr1     200001-400000      * |    300000      TRUE         FALSE
+#>       [1]     chr1          1-100000      * |   50000.5      TRUE         FALSE
+#>       [2]     chr1      50001-150000      * |  100000.5     FALSE         FALSE
+#>       [3]     chr1     100001-200000      * |  150000.5      TRUE         FALSE
+#>       [4]     chr1     150001-250000      * |  200000.5      TRUE         FALSE
+#>       [5]     chr1     200001-300000      * |  250000.5      TRUE         FALSE
 #>       ...      ...               ...    ... .       ...       ...           ...
-#>   [57563]    chr22 50950001-51150000      * |  51050000     FALSE         FALSE
-#>   [57564]    chr22 51000001-51200000      * |  51100000     FALSE         FALSE
-#>   [57565]    chr22 51050001-51250000      * |  51150000      TRUE         FALSE
-#>   [57566]    chr22 51100001-51300000      * |  51200000      TRUE         FALSE
-#>   [57567]    chr22 51150001-51304566      * |  51227284      TRUE         FALSE
-#>              modern    ancient        chen
-#>           <numeric>  <numeric>   <numeric>
-#>       [1]         0          0           0
-#>       [2]         0          0           0
-#>       [3]         0          0           0
-#>       [4]         0          0           0
-#>       [5]         0          0           0
-#>       ...       ...        ...         ...
-#>   [57563] 0.0204461 0.01162623 5.00457e-04
-#>   [57564] 0.0204461 0.01138138 3.43936e-06
-#>   [57565] 0.0203071 0.01102865 0.00000e+00
-#>   [57566] 0.0127992 0.00683655 0.00000e+00
-#>   [57567] 0.0000000 0.00000000 0.00000e+00
+#>   [57607]    chr22 51050001-51150000      * |  51100000     FALSE         FALSE
+#>   [57608]    chr22 51100001-51200000      * |  51150000     FALSE         FALSE
+#>   [57609]    chr22 51150001-51250000      * |  51200000      TRUE         FALSE
+#>   [57610]    chr22 51200001-51300000      * |  51250000      TRUE         FALSE
+#>   [57611]    chr22 51250001-51304566      * |  51277284      TRUE         FALSE
+#>              modern   ancient      chen
+#>           <numeric> <numeric> <numeric>
+#>       [1]        NA        NA        NA
+#>       [2]         0         0         0
+#>       [3]        NA        NA        NA
+#>       [4]        NA        NA        NA
+#>       [5]        NA        NA        NA
+#>       ...       ...       ...       ...
+#>   [57607] 0.0406143 0.0220573         0
+#>   [57608] 0.0255985 0.0136731         0
+#>   [57609]        NA        NA        NA
+#>   [57610]        NA        NA        NA
+#>   [57611]        NA        NA        NA
 #>   -------
 #>   seqinfo: 22 sequences from hg19 genome
 ```
 
 ``` r
-plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr7")
+plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr1")
+#> Warning: Removed 98 rows containing missing values or values outside the scale range
+#> (`geom_line()`).
+#> Removed 98 rows containing missing values or values outside the scale range
+#> (`geom_line()`).
+#> Warning: Removed 1 row containing missing values or values outside the scale range
+#> (`geom_hline()`).
+#> Removed 1 row containing missing values or values outside the scale range
+#> (`geom_hline()`).
 ```
 
-![](deserts_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
+![](deserts_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+``` r
+plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr3")
+#> Warning: Removed 1 row containing missing values or values outside the scale range
+#> (`geom_hline()`).
+#> Removed 1 row containing missing values or values outside the scale range
+#> (`geom_hline()`).
+```
+
+![](deserts_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+
+``` r
+plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr7")
+#> Warning: Removed 1 row containing missing values or values outside the scale range
+#> (`geom_hline()`).
+#> Removed 1 row containing missing values or values outside the scale range
+#> (`geom_hline()`).
+```
+
+![](deserts_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+
+``` r
+plot_desert_ancestry2(ancestry_gr, deserts_gr, "chr8")
+```
+
+![](deserts_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
