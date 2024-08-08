@@ -429,6 +429,28 @@ metadata %>%
 ```
 
 ```{r}
+library(sf)
+library(rnaturalearth)
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+sf::st_agr(world) <- "constant"
+bbox <- st_as_sfc(st_bbox(c(xmin = -25, xmax = 65, ymin = 25, ymax = 70), crs = st_crs(world)))
+western_eurasia <- st_crop(st_make_valid(world), bbox)
+
+metadata %>%
+  filter(!is.na(latitude) & !is.na(longitude)) %>%
+  st_as_sf(coords = c("longitude", "latitude")) %>%
+  st_set_crs(4326) %>%
+  ggplot() +
+    geom_sf(data = western_eurasia) +
+    geom_sf(aes(color = sample_age)) +
+    coord_sf(crs = 3035) +
+    facet_wrap(~ sample_age) +
+    theme_bw() +
+    theme(legend.position = "none", text = element_text(size = 15))
+```
+
+```{r}
 tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
 
 tracts_df <- select(metadata, sampleId, ageAverage, sample_age, coverage) %>%

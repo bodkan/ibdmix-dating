@@ -457,6 +457,31 @@ metadata %>%
 ```
 
 ``` r
+library(sf)
+#> Linking to GEOS 3.11.0, GDAL 3.5.3, PROJ 9.1.0; sf_use_s2() is TRUE
+library(rnaturalearth)
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+sf::st_agr(world) <- "constant"
+bbox <- st_as_sfc(st_bbox(c(xmin = -25, xmax = 65, ymin = 25, ymax = 70), crs = st_crs(world)))
+western_eurasia <- st_crop(st_make_valid(world), bbox)
+
+metadata %>%
+  filter(!is.na(latitude) & !is.na(longitude)) %>%
+  st_as_sf(coords = c("longitude", "latitude")) %>%
+  st_set_crs(4326) %>%
+  ggplot() +
+    geom_sf(data = western_eurasia) +
+    geom_sf(aes(color = sample_age)) +
+    coord_sf(crs = 3035) +
+    facet_wrap(~ sample_age) +
+    theme_bw() +
+    theme(legend.position = "none", text = element_text(size = 15))
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+``` r
 tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
 #> Rows: 1272453 Columns: 26
 #> ── Column specification ────────────────────────────────────────────────────────
@@ -499,7 +524,7 @@ ggplot() +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age:", x)))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -508,7 +533,7 @@ ggplot(tracts_df) +
   theme_bw()
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 ``` r
 # sample_age <- "present-day"
@@ -679,7 +704,7 @@ p_density2 <- results_df %>%
 cowplot::plot_grid(p_density, p_density2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
 
 ``` r
 p_time <- results_df %>%
@@ -712,7 +737,7 @@ p_time2 <- results_df %>%
 cowplot::plot_grid(p_time, p_time2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
 
 ## Fitting exponential decay of truncated distributions
 
@@ -733,7 +758,7 @@ x_full <- rexp(100000, rate = lambda_true)
 h_full <- hist(x_full, breaks = seq(0, max(x_full), length.out = 100), freq = TRUE)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-19-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 We can fit an exponential function using a MLE estimate of $\lambda$,
 which can be computed from an estimate of the mean $\bar{x}$ of the
@@ -757,7 +782,7 @@ y_values <- dexp(x_values, rate = lambda_full)
 lines(x_values, sum(h_full$counts) * y_values, col = "red", lty = "dashed", lwd = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 Let’s now truncate the observed exponentially-distributed data starting
 from a given cutoff value $c$.
@@ -769,7 +794,7 @@ x_trunc <- x_full[x_full > c]
 h_trunc <- hist(x_trunc, breaks = seq(0, max(x_full), length.out = 100), ylim = c(0, max(h_full$counts)))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 It turns out that the mean of the original (non-truncated) distribution
 $\bar{x}$ can be estimated from the mean of the truncated data
@@ -803,7 +828,7 @@ y_values <- dexp(x_values, rate = lambda_hat)
 lines(x_values + c, sum(h_trunc$counts) * y_values, col = "red", lty = "dashed", lwd = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 Basically, what we’re doing by this is take the truncated distribution
 (truncated from $c$ to the right) as if it was some other non-truncated
