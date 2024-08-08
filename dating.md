@@ -265,7 +265,7 @@ p_density <- results_df %>%
     ylab("RMSE observed vs fitted tract length density") +
     facet_wrap(~ min_length,
                labeller = labeller(min_length = function(x) paste("minimum segment length =", as.integer(x) / 1e3, "kb")))
-  
+
 p_time <- results_df %>%
   ggplot(aes(as.factor(sample_age), ratio_time, color = method)) +
     geom_point() +
@@ -845,3 +845,103 @@ Basically, what we’re doing by this is take the truncated distribution
 (truncated from $c$ to the right) as if it was some other non-truncated
 distribution. The fitted line works because we then shift `x_values` to
 the right by `c`.
+
+### Sanity checks of my filtering against Alba’s Figure 2. B/C
+
+``` r
+tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
+#> Rows: 1272453 Columns: 26
+#> ── Column specification ────────────────────────────────────────────────────────
+#> Delimiter: "\t"
+#> chr  (8): ID, population, superpop, region, clusterAlias, pop, groupAge, arc...
+#> dbl (17): ageAverage, chrom, start, end, slod, sites, positive_lods, negativ...
+#> lgl  (1): anc
+#> 
+#> ℹ Use `spec()` to retrieve the full column specification for this data.
+#> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+#> Rows: 1272453 Columns: 26
+#> ── Column specification ────────────────────────────────────────────────────────
+#> Delimiter: "\t"
+#> chr  (8): ID, population, superpop, region, clusterAlias, pop, groupAge, arc...
+#> dbl (17): ageAverage, chrom, start, end, slod, sites, positive_lods, negativ...
+#> lgl  (1): anc
+#> 
+#> ℹ Use `spec()` to retrieve the full column specification for this data.
+#> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+
+tracts_df <- select(metadata, sampleId, ageAverage, coverage) %>%
+  inner_join(tracts_df, by = c("sampleId" = "ID"))
+
+tracts_df$age_group <- cut(
+  tracts_df$ageAverage,
+  breaks = c(Inf, 20e3, 10e3, 5e3, 100, 0),
+)
+
+group_levels <- levels(tracts_df$age_group)
+
+tracts_df <- tracts_df %>%
+  mutate(
+    age_group = as.character(age_group),
+    age_group = ifelse(is.na(age_group), "present-day", age_group),
+    age_group = factor(age_group, levels = c("present-day", group_levels))
+  )
+```
+
+``` r
+tapply(tracts_df$length, tracts_df$age_group, summary)
+#> $`present-day`
+#>    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#>   50000   63945   90686  134987  149351 6089550 
+#> 
+#> $`(0,100]`
+#> NULL
+#> 
+#> $`(100,5e+03]`
+#>    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#>   50000   64263   91397  136335  151508 6080785 
+#> 
+#> $`(5e+03,1e+04]`
+#>    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#>   50000   64798   92585  139766  154420 6527040 
+#> 
+#> $`(1e+04,2e+04]`
+#>    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#>   50007   64897   93809  144052  159122 2228427 
+#> 
+#> $`(2e+04,Inf]`
+#>    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#>   50010   67104  107215  210207  222540 5347136
+```
+
+``` r
+ggplot(tracts_df) +
+  geom_density(aes(length, color = age_group)) +
+  scale_x_log10()
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
+
+``` r
+ggplot(tracts_df) +
+  geom_density(aes(length, color = age_group)) +
+  coord_cartesian(xlim = c(0, 1e6))
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+
+``` r
+ggplot(tracts_df) +
+  geom_boxplot(aes(age_group, length, color = age_group)) +
+  geom_hline(yintercept = c(50e3, 250e3), linetype = "dashed")
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+``` r
+ggplot(tracts_df) +
+  geom_boxplot(aes(age_group, length, color = age_group)) +
+  geom_hline(yintercept = c(50e3, 250e3), linetype = "dashed") +
+  coord_cartesian(ylim = c(50e3, 250e3)) 
+```
+
+![](dating_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->

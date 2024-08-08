@@ -2,7 +2,7 @@
 #    self_contained: yes
 output:
   github_document:
-    html_preview: false
+  html_preview: false
 ---
 
 ```{r setup, include=FALSE}
