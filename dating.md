@@ -405,7 +405,7 @@ inner_join(
 #> [1] TRUE
 ```
 
-## Admixture dating using empirical data
+## Admixture dating in empirical data
 
 ``` r
 metadata <- read_metadata()
@@ -494,7 +494,7 @@ ggplot() +
   scale_x_continuous(labels = scales::comma) +
   expand_limits(y = 0) +
   coord_cartesian(ylim = c(0, 2e-5), xlim = c(0, 2e6)) +
-  theme_minimal() +
+  theme_bw() +
   theme(legend.position = "none", text = element_text(size = 15)) +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age:", x)))
 ```
