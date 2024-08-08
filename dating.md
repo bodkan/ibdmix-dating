@@ -283,6 +283,15 @@ cowplot::plot_grid(p_density, p_time, nrow = 2)
 
 ![](dating_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
+**Note:** The stricted the minimum length cutoff, the higher the RMSE of
+a fit against the real data, and this is worse the younger the sample
+is. This is because young samples have the highest proportion of very
+short tracts (and very few longer tracts), so the exponential decay data
+is actually the noisiest, and the fit is necessarily poorer. It’s the
+opposite for the oldest samples, which have much fewer short tracts (so
+the distribution is less affected by filtering for minimum length) and
+many more longer tracts (which are not affected by filtering at all).
+
 ``` r
 p_density2 <- results_df %>%
   ggplot(aes(method, rmse_density)) +
