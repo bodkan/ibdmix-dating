@@ -54,7 +54,7 @@ tracts_gr
 ### Compute Neanderthal ancestry proportions in windows
 
 ``` r
-pdf("test_windows.pdf", width = 10, height = 13)
+pdf("test_windows.pdf", width = 8, height = 10)
 
 par(mfrow = c(4, 1))
 
