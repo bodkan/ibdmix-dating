@@ -437,6 +437,16 @@ inner_join(
   all()
 ```
 
+
+
+
+
+
+
+
+
+
+
 ## Admixture dating in empirical data
 
 ```{r}
@@ -819,7 +829,7 @@ lines(x_values, sum(h_full$counts) * y_values, col = "orange", lty = "dashed", l
 
 Basically, what we're doing by this is take the truncated distribution (truncated from $c$ to the right) as if it was some other non-truncated distribution. The fitted line works because we then shift `x_values` to the right by `c`.
 
-### Sanity checks of my filtering against Alba's Figure 2. B/C
+## Sanity checks of my filtering against Alba's Figure 2. B/C
 
 ```{r}
 tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))

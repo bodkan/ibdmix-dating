@@ -53,15 +53,6 @@ ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples
 tracts <- ts_tracts(ts, census = t_admix, quiet = TRUE)
 
 head(tracts)
-#> # A tibble: 6 × 8
-#>   name  node_id pop   source_pop     left    right  length source_pop_id
-#>   <chr>   <dbl> <fct> <fct>         <dbl>    <dbl>   <dbl>         <dbl>
-#> 1 EUR_1       0 EUR   NEA        19127220 19527944  400724             2
-#> 2 EUR_1       0 EUR   NEA        50960983 51219943  258960             2
-#> 3 EUR_1       0 EUR   NEA        54542568 55565589 1023021             2
-#> 4 EUR_1       0 EUR   NEA        59782108 59938917  156809             2
-#> 5 EUR_1       0 EUR   NEA        95275454 96092356  816902             2
-#> 6 EUR_1       1 EUR   NEA          482833   887166  404333             2
 ```
 
 ``` r
@@ -932,7 +923,7 @@ Basically, what we’re doing by this is take the truncated distribution
 distribution. The fitted line works because we then shift `x_values` to
 the right by `c`.
 
-### Sanity checks of my filtering against Alba’s Figure 2. B/C
+## Sanity checks of my filtering against Alba’s Figure 2. B/C
 
 ``` r
 tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
