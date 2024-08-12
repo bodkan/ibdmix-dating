@@ -59,8 +59,13 @@ plot_model(model, proportions = TRUE, order = c("AFR", "EUR", "ancestor", "NEA")
 ```{r, eval=!file.exists("data/sim_tracts.tsv")}
 ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples = samples, random_seed = 42)
 
-tracts_df <- ts_tracts(ts, census = t_admix, quiet = TRUE) %>%
-  dplyr::select(-node_id, -pop, -source_pop, -source_pop_id)
+tracts <- ts_tracts(ts, census = t_admix, quiet = TRUE)
+
+head(tracts)
+```
+
+```{r, eval=!file.exists("data/sim_tracts.tsv")}
+tracts_df <- tracts %>% dplyr::select(-node_id, -pop, -source_pop, -source_pop_id)
 
 samples_df <- ts_samples(ts) %>% dplyr::rename(sample_age = time)
 
