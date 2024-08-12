@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 
 set.seed(42)
 
-unlink("deserts", recursive = TRUE)
+unlink("deserts_files", recursive = TRUE)
 ```
 
 ```{r}
