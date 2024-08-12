@@ -74,13 +74,18 @@ write.table(tracts_df, file = "data/sim_tracts.tsv",
 tracts_df <- read_tsv("data/sim_tracts.tsv")
 ```
 
-## Comparison of filtered and unfiltered tract distributions
+## Tract-length distributions for different sample ages
+
+**(I.e., different times since Neanderthal introgression.)**
+
+### Complete admixture tracts
 
 ```{r}
+tracts_df %>%
 ggplot() +
-  geom_density(data = tracts_df, aes(length), alpha = 0.2) +
+  geom_density(aes(length), alpha = 0.2) +
   geom_histogram(
-    data = tracts_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
     binwidth = 10000, alpha = 0.75
   ) +
   labs(
@@ -89,7 +94,30 @@ ggplot() +
   ) +
   scale_x_continuous(labels = scales::comma) +
   expand_limits(y = 0) +
-  coord_cartesian(ylim = c(0, 2e-5)) +
+  coord_cartesian(xlim = c(0, 1.5e6), ylim = c(0, 2e-5)) +
+  theme_bw() +
+  theme(legend.position = "none", text = element_text(size = 15)) +
+  facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
+```
+
+### Admixture tracts longer than 50 kb
+
+```{r}
+filter(tracts_df, length > 50e3) %>%
+ggplot() +
+  geom_density(aes(length), alpha = 0.2) +
+  geom_histogram(
+    aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    binwidth = 10000, alpha = 0.75
+  ) +
+  labs(
+    x = "tract length [bp]", y = "density", fill = "age of sample",
+    title = "Tract length distribution as a function of admixed sample's age"
+  ) +
+  geom_vline(xintercept = 50e3, linetype = 2) +
+  scale_x_continuous(labels = scales::comma) +
+  expand_limits(y = 0) +
+  coord_cartesian(xlim = c(0, 1.5e6), ylim = c(0, 2e-5)) +
   theme_bw() +
   theme(legend.position = "none", text = element_text(size = 15)) +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
@@ -476,7 +504,7 @@ ggplot() +
   ) +
   scale_x_continuous(labels = scales::comma) +
   expand_limits(y = 0) +
-  coord_cartesian(ylim = c(0, 2e-5), xlim = c(0, 2e6)) +
+  coord_cartesian(ylim = c(0, 2e-5), xlim = c(0, 1e6)) +
   theme_bw() +
   theme(legend.position = "none", text = element_text(size = 15)) +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age:", x)))
@@ -691,7 +719,7 @@ cowplot::plot_grid(p_time, p_time2, nrow = 2)
 
 Exploring the basic modeling techniques used above.
 
-**This is a "complete" exponential distribution.** It has a rate parameter $\lambda$ and will have the expected value of $1 / lambda$.
+**This is a "complete" exponential distribution.** It has a rate parameter $\lambda$ and will have the expected value of $1 / \lambda$.
 
 ```{r}
 set.seed(42)
@@ -699,9 +727,9 @@ set.seed(42)
 lambda_true <- 0.1
 (mean_true <- 1 / lambda_true)
 
-x_full <- rexp(100000, rate = lambda_true)
+x_full <- rexp(1e6, rate = lambda_true)
 
-h_full <- hist(x_full, breaks = seq(0, max(x_full), length.out = 100), freq = TRUE)
+h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
 ```
 
 We can fit an exponential function using a MLE estimate of $\lambda$, which can be computed from an estimate of the mean $\bar{x}$ of the observed data as $\hat{\lambda} = 1 / \bar{x}$:
@@ -714,11 +742,11 @@ We can fit an exponential function using a MLE estimate of $\lambda$, which can 
 We can then plot the fitted exponential over the "observed data" using this estimated $\hat{\lambda}$:
 
 ```{r}
-h_full <- hist(x_full, breaks = seq(0, max(x_full), length.out = 100), freq = TRUE)
+h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
 
 x_values <- h_full$mids
 y_values <- dexp(x_values, rate = lambda_full)
-lines(x_values, sum(h_full$counts) * y_values, col = "red", lty = "dashed", lwd = 2)
+lines(x_values, sum(h_full$counts) * y_values, col = "orange", lty = "dashed", lwd = 3)
 ```
 
 Let's now truncate the observed exponentially-distributed data starting from a given cutoff value $c$.
@@ -727,10 +755,23 @@ Let's now truncate the observed exponentially-distributed data starting from a g
 c <- 5
 x_trunc <- x_full[x_full > c]
 
-h_trunc <- hist(x_trunc, breaks = seq(0, max(x_full), length.out = 100), ylim = c(0, max(h_full$counts)))
+# h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
+h_trunc <- hist(x_trunc, breaks = 100, ylim = c(0, max(h_full$counts)), col = "grey36", border = FALSE)
 ```
 
-It turns out that the mean of the original (non-truncated) distribution $\bar{x}$ can be estimated from the mean of the truncated data $\bar{x}'$ as $\bar{x}' - c$:
+The mean of the truncated exponential $\bar{x}'$ is:
+
+```{r}
+mean(x_trunc)
+```
+
+And the MLE of the rate parameter $\lambda'$ can be again computed as $\hat{\lambda}' = 1 / \bar{x}'$:
+
+```{r}
+1 / mean(x_trunc)
+```
+
+It turns out that the expected value of the original (non-truncated) distribution $\bar{x}$ can be estimated from the mean of the truncated data $\bar{x}'$ as $\bar{x}' - c$:
 
 ```{r}
 mean(x_trunc) - c
@@ -745,11 +786,30 @@ And, as shown above, because the MLE of the rate $\lambda$ of an exponential dis
 Let's verify this by overlaying the exponential curve with the rate $\hat{\lambda}$ (i.e. estimated rate of the non-truncated distribution) over the truncated data:
 
 ```{r}
-h_trunc <- hist(x_trunc, breaks = seq(0, max(x_full), length.out = 100), ylim = c(0, max(h_full$counts)))
+h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
+h_trunc <- hist(x_trunc, breaks = 100, ylim = c(0, max(h_full$counts)), add = TRUE, col = "grey36", border = FALSE)
+```
+
+```{r}
+h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
+h_trunc <- hist(x_trunc, breaks = 100, ylim = c(0, max(h_full$counts)), add = TRUE, col = "grey36", border = FALSE)
 
 x_values <- h_trunc$mids
 y_values <- dexp(x_values, rate = lambda_hat)
-lines(x_values + c, sum(h_trunc$counts) * y_values, col = "red", lty = "dashed", lwd = 2)
+lines(x_values, sum(h_full$counts) * y_values, col = "red", lty = "dashed", lwd = 3)
+```
+
+```{r}
+h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
+h_trunc <- hist(x_trunc, breaks = 100, ylim = c(0, max(h_full$counts)), add = TRUE, col = "grey36", border = FALSE)
+
+x_values <- h_trunc$mids
+y_values <- dexp(x_values, rate = lambda_hat)
+lines(x_values, sum(h_full$counts) * y_values, col = "red", lty = "dashed", lwd = 3)
+
+x_values <- h_full$mids
+y_values <- dexp(x_values, rate = lambda_full)
+lines(x_values, sum(h_full$counts) * y_values, col = "orange", lty = "dashed", lwd = 3)
 ```
 
 Basically, what we're doing by this is take the truncated distribution (truncated from $c$ to the right) as if it was some other non-truncated distribution. The fitted line works because we then shift `x_values` to the right by `c`.
