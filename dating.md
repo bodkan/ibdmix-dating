@@ -87,11 +87,117 @@ head(tracts_df)
 #> 6 EUR_1      50000 EUR     482833   887166  404333
 ```
 
+## How does admixture dating work?
+
+![](dating_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+
+Exponential distribution is governed by the following density function
+with a *rate parameter* $\lambda$:
+
+$$
+f(\textrm{tract length }~x) \sim \lambda \exp^{-\lambda x}.
+$$
+
+In the case of exponential decay of admixture tracts and after making
+some simplifying assumptions, the $\lambda$ rate parameter can be
+parametrized as:
+
+$$
+\lambda = \frac{1}{r t},
+$$
+
+where $r$ is the recombination rate and $t$ is the time (in generations)
+since the admixture event.
+
+The expected value of such exponential distribution is given by:
+
+$$
+\mathop{\mathbb{E}} [X] = \frac{1}{\lambda}
+$$
+
+Because we can get the MLE of this expectation by computing a simple
+mean of tract lengths $\bar{x}$, we can also write:
+
+$$
+\bar{x} \approx \mathop{\mathbb{E}} [X] = \frac{1}{\lambda}.
+$$
+
+From this, we can therefore get an estimate the rate of exponential
+decay $\hat{\lambda}$ as:
+
+$$
+\hat{\lambda} = \frac{1}{\bar{x}},
+$$ and overlay an exponential function over the histogram using
+`dexp(..., rate = <lambda>)` in R:
+
+![](dating_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+But more importantly, because we know that $\lambda = 1 / (r t)$,
+assuming we know the uniform average recombination rate $r$ reasonably
+well, we can estimate the time of admixture $t$ as:
+
+$$
+t \approx \frac{\hat{\lambda}}{r}.
+$$ For example, given a vector of tract lengths in this “10 ky old”
+simulated individual
+
+``` r
+head(tract_lengths, 10)
+#>  [1]  21534  13565  15525  15010 100187  84661  33149  12517  13644 225368
+```
+
+we can compute $\hat{\lambda}$:
+
+``` r
+lambda_hat <- 1 / mean(tract_lengths)
+lambda_hat
+#> [1] 1.464982e-05
+```
+
+And get the estimate of time since Neanderthal admixture in the history
+of this individual:
+
+``` r
+r <- 1e-8 # recombination rate (crossovers per bp per generation)
+
+lambda_hat / r # admixture time in "generations before this individual lived"
+#> [1] 1464.982
+```
+
+To get the absolute admixture time, we convert generations to years and
+add the “radiocarbon date” of this individual:
+
+``` r
+lambda_hat / r * gen_time + 10000 # absolute admixture time in "years ago"
+#> [1] 49554.52
+```
+
+**But what if we have filtered data? Traditionally, tracts are filtered
+by removing tracts shorter than a certain cutoff:**
+
+![](dating_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+
+![](dating_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+<!-- ```{r} -->
+<!-- min_length <- 50e3 -->
+<!-- ggplot() + -->
+<!--   geom_density(data = tracts_df, -->
+<!--                aes(length, y = after_stat(count), color = factor(sample_age), linetype = "unfiltered")) + -->
+<!--   geom_density(data = filter(tracts_df, length >= min_length), -->
+<!--                aes(length, y = after_stat(count), color = factor(sample_age), linetype = "filtered"), -->
+<!--                color = "black") + -->
+<!--   guides(color = "none") + -->
+<!--   labs(linetype = "tracts") + -->
+<!--   scale_linetype_manual(values = c("unfiltered" = "solid", "filtered" = "dashed")) + -->
+<!--   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya"))) + -->
+<!--   coord_cartesian(xlim = c(0, 1e6)) + -->
+<!--   theme_bw() -->
+<!-- ``` -->
+
 ## Tract-length distributions for different sample ages
 
 **(I.e., different times since Neanderthal introgression.)**
-
-### Complete admixture tracts
 
 ``` r
 tracts_df %>%
@@ -113,48 +219,7 @@ ggplot() +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
-
-### Admixture tracts longer than 50 kb
-
-``` r
-filter(tracts_df, length > 50e3) %>%
-ggplot() +
-  geom_density(aes(length), alpha = 0.2) +
-  geom_histogram(
-    aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
-    binwidth = 10000, alpha = 0.75
-  ) +
-  labs(
-    x = "tract length [bp]", y = "density", fill = "age of sample",
-    title = "Tract length distribution as a function of admixed sample's age"
-  ) +
-  geom_vline(xintercept = 50e3, linetype = 2) +
-  scale_x_continuous(labels = scales::comma) +
-  expand_limits(y = 0) +
-  coord_cartesian(xlim = c(0, 2e6), ylim = c(0, 2e-5)) +
-  theme_bw() +
-  theme(legend.position = "none", text = element_text(size = 15)) +
-  facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
-```
-
-![](dating_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
-
-<!-- ```{r} -->
-<!-- min_length <- 50e3 -->
-<!-- ggplot() + -->
-<!--   geom_density(data = tracts_df, -->
-<!--                aes(length, y = after_stat(count), color = factor(sample_age), linetype = "unfiltered")) + -->
-<!--   geom_density(data = filter(tracts_df, length >= min_length), -->
-<!--                aes(length, y = after_stat(count), color = factor(sample_age), linetype = "filtered"), -->
-<!--                color = "black") + -->
-<!--   guides(color = "none") + -->
-<!--   labs(linetype = "tracts") + -->
-<!--   scale_linetype_manual(values = c("unfiltered" = "solid", "filtered" = "dashed")) + -->
-<!--   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya"))) + -->
-<!--   coord_cartesian(xlim = c(0, 1e6)) + -->
-<!--   theme_bw() -->
-<!-- ``` -->
+![](dating_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
 ## Estimating admixture time from tract lengths
 
@@ -325,7 +390,7 @@ p_time <- results_df %>%
 cowplot::plot_grid(p_density, p_time, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
 **Note:** The stricted the minimum length cutoff, the higher the RMSE of
 a fit against the real data, and this is worse the younger the sample
@@ -364,7 +429,7 @@ p_time2 <- results_df %>%
 cowplot::plot_grid(p_density2, p_time2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
 
 ## Estimating admixture time from tract lengths v2
 
@@ -494,7 +559,7 @@ ggplot(metadata) +
         axis.title.x = element_text(size = 15, angle = 0, hjust = 0.5))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
 ``` r
 metadata %>%
@@ -536,7 +601,7 @@ metadata %>%
     theme(legend.position = "none", text = element_text(size = 15))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 ``` r
 tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
@@ -582,7 +647,7 @@ ggplot() +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age:", x)))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -591,7 +656,7 @@ ggplot(tracts_df) +
   theme_bw()
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 ``` r
 # sample_age <- "present-day"
@@ -762,7 +827,7 @@ p_density2 <- results_df %>%
 cowplot::plot_grid(p_density, p_density2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
 ``` r
 p_time <- results_df %>%
@@ -795,7 +860,7 @@ p_time2 <- results_df %>%
 cowplot::plot_grid(p_time, p_time2, nrow = 2)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ## Estimating admixture time from tract lengths v2
 
@@ -902,16 +967,16 @@ parameter $\lambda$ and will have the expected value of $1 / \lambda$.
 ``` r
 set.seed(42)
 
-lambda_true <- 0.1
+lambda_true <- 0.17
 (mean_true <- 1 / lambda_true)
-#> [1] 10
+#> [1] 5.882353
 
 x_full <- rexp(1e6, rate = lambda_true)
 
 h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
 
 We can fit an exponential function using a MLE estimate of $\lambda$,
 which can be computed from an estimate of the mean $\bar{x}$ of the
@@ -919,9 +984,9 @@ observed data as $\hat{\lambda} = 1 / \bar{x}$:
 
 ``` r
 (mean_full <- mean(x_full))
-#> [1] 10.00159
+#> [1] 5.883287
 (lambda_full <- 1 / mean_full)
-#> [1] 0.09998413
+#> [1] 0.169973
 ```
 
 We can then plot the fitted exponential over the “observed data” using
@@ -935,7 +1000,7 @@ y_values <- dexp(x_values, rate = lambda_full)
 lines(x_values, sum(h_full$counts) * y_values, col = "orange", lty = "dashed", lwd = 3)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
 
 Let’s now truncate the observed exponentially-distributed data starting
 from a given cutoff value $c$.
@@ -945,16 +1010,16 @@ c <- 5
 x_trunc <- x_full[x_full > c]
 
 # h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
-h_trunc <- hist(x_trunc, breaks = 100, ylim = c(0, max(h_full$counts)), col = "grey36", border = FALSE)
+h_trunc <- hist(x_trunc, breaks = 100, ylim = c(0, max(h_full$counts)), xlim = c(0, max(h_full$mids)), col = "grey36", border = FALSE)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
 
 The mean of the truncated exponential $\bar{x}'$ is:
 
 ``` r
 mean(x_trunc)
-#> [1] 14.99515
+#> [1] 10.88074
 ```
 
 And the MLE of the rate parameter $\lambda'$ can be again computed as
@@ -962,16 +1027,16 @@ $\hat{\lambda}' = 1 / \bar{x}'$:
 
 ``` r
 1 / mean(x_trunc)
-#> [1] 0.06668824
+#> [1] 0.0919055
 ```
 
-It turns out that the expected value of the original (non-truncated)
+**It turns out that the expected value of the original (non-truncated)
 distribution $\bar{x}$ can be estimated from the mean of the truncated
-data $\bar{x}'$ as $\bar{x}' - c$:
+data $\bar{x}'$ as $\bar{x}' - c$:**
 
 ``` r
 mean(x_trunc) - c
-#> [1] 9.995147
+#> [1] 5.880741
 ```
 
 And, as shown above, because the MLE of the rate $\lambda$ of an
@@ -982,7 +1047,7 @@ $\hat{\lambda} = 1 / (\bar{x}' - c)$:
 
 ``` r
 (lambda_hat <- 1 / (mean(x_trunc) - c))
-#> [1] 0.1000486
+#> [1] 0.1700466
 ```
 
 Let’s verify this by overlaying the exponential curve with the rate
@@ -994,7 +1059,7 @@ h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
 h_trunc <- hist(x_trunc, breaks = 100, ylim = c(0, max(h_full$counts)), add = TRUE, col = "grey36", border = FALSE)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-39-1.png)<!-- -->
 
 ``` r
 h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
@@ -1005,7 +1070,7 @@ y_values <- dexp(x_values, rate = lambda_hat)
 lines(x_values, sum(h_full$counts) * y_values, col = "red", lty = "dashed", lwd = 3)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-40-1.png)<!-- -->
 
 ``` r
 h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
@@ -1020,7 +1085,7 @@ y_values <- dexp(x_values, rate = lambda_full)
 lines(x_values, sum(h_full$counts) * y_values, col = "orange", lty = "dashed", lwd = 3)
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-41-1.png)<!-- -->
 
 Basically, what we’re doing by this is take the truncated distribution
 (truncated from $c$ to the right) as if it was some other non-truncated
@@ -1100,7 +1165,7 @@ ggplot(tracts_df) +
   scale_x_log10()
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-37-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-44-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -1108,7 +1173,7 @@ ggplot(tracts_df) +
   coord_cartesian(xlim = c(0, 1e6))
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-38-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-45-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -1116,7 +1181,7 @@ ggplot(tracts_df) +
   geom_hline(yintercept = c(50e3, 250e3), linetype = "dashed")
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-39-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-46-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -1125,4 +1190,4 @@ ggplot(tracts_df) +
   coord_cartesian(ylim = c(50e3, 250e3)) 
 ```
 
-![](dating_files/figure-gfm/unnamed-chunk-40-1.png)<!-- -->
+![](dating_files/figure-gfm/unnamed-chunk-47-1.png)<!-- -->
