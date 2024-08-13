@@ -51,8 +51,6 @@ plot_model(model, proportions = TRUE, order = c("AFR", "EUR", "ancestor", "NEA")
 ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples = samples, random_seed = 42)
 
 tracts <- ts_tracts(ts, census = t_admix, quiet = TRUE)
-
-head(tracts)
 ```
 
 ``` r
@@ -76,6 +74,17 @@ tracts_df <- read_tsv("data/sim_tracts.tsv")
 #> 
 #> ℹ Use `spec()` to retrieve the full column specification for this data.
 #> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+
+head(tracts_df)
+#> # A tibble: 6 × 6
+#>   name  sample_age pop       left    right  length
+#>   <chr>      <dbl> <chr>    <dbl>    <dbl>   <dbl>
+#> 1 EUR_1      50000 EUR   19127220 19527944  400724
+#> 2 EUR_1      50000 EUR   50960983 51219943  258960
+#> 3 EUR_1      50000 EUR   54542568 55565589 1023021
+#> 4 EUR_1      50000 EUR   59782108 59938917  156809
+#> 5 EUR_1      50000 EUR   95275454 96092356  816902
+#> 6 EUR_1      50000 EUR     482833   887166  404333
 ```
 
 ## Tract-length distributions for different sample ages

@@ -61,8 +61,6 @@ plot_model(model, proportions = TRUE, order = c("AFR", "EUR", "ancestor", "NEA")
 ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples = samples, random_seed = 42)
 
 tracts <- ts_tracts(ts, census = t_admix, quiet = TRUE)
-
-head(tracts)
 ```
 
 ```{r, eval=!file.exists("data/sim_tracts.tsv")}
@@ -78,6 +76,8 @@ write.table(tracts_df, file = "data/sim_tracts.tsv",
 
 ```{r, eval=file.exists("data/sim_tracts.tsv")}
 tracts_df <- read_tsv("data/sim_tracts.tsv")
+
+head(tracts_df)
 ```
 
 ## Tract-length distributions for different sample ages
