@@ -17,6 +17,7 @@ knitr::opts_chunk$set(
 set.seed(42)
 
 unlink("dating_files", recursive = TRUE)
+unlink(list.files(".", "dating.*.pdf"), recursive = TRUE)
 ```
 
 ```{r}
@@ -536,7 +537,7 @@ ggplot(tracts_df) +
 # sample_age <- "present-day"
 # min_length <- 50e3
 
-max_length <- 1e6
+max_length <- Inf
 
 results <- list()
 
