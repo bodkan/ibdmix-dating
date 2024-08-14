@@ -1,0 +1,41 @@
+---
+#    self_contained: yes
+output:
+  github_document:
+  html_preview: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 13,
+  fig.height = 9
+)
+
+set.seed(42)
+
+unlink("dating_files", recursive = TRUE)
+unlink(list.files(".", "dating.*.pdf"), recursive = TRUE)
+```
+
+```{r}
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(tidyr)
+library(Metrics)
+
+library(slendr)
+init_env(quiet = TRUE)
+
+suppressPackageStartupMessages(source(here::here("utils.R")))
+```
+
+```{r, eval=file.exists("data/sim_tracts.tsv")}
+tracts_df <- read_tsv("data/sim_tracts.tsv")
+
+head(tracts_df)
+```
+
