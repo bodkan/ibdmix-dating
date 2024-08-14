@@ -581,7 +581,7 @@ metadata %>%
 ```
 
 ```{r}
-tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
+tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient"))
 
 tracts_df <- select(metadata, sampleId, ageAverage, sample_age, coverage) %>%
   inner_join(tracts_df, by = c("sampleId" = "ID"))

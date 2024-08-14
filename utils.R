@@ -21,7 +21,9 @@ read_metadata <- function() {
   info
 }
 
-read_tracts <- function(set, metadata) {
+read_tracts <- function(set) {
+  metadata <- read_metadata()
+
   info <- filter(metadata, groupAge == set)
 
   raw_tracts <- read_tsv(here::here("data/Vindija33.19_raw_eurasian_wModern.gz"))

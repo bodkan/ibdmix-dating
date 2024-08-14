@@ -151,10 +151,7 @@ metadata %>%
 ## Inspect Neanderthal tracts in ancient and present-day individuals
 
 ```{r}
-tracts <- rbind(
-  read_tracts("Modern", metadata),
-  read_tracts("Ancient", metadata)
-)
+tracts <- rbind(read_tracts("Modern"), read_tracts("Ancient"))
 
 tracts
 ```
