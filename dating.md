@@ -126,7 +126,7 @@ From this, we can therefore get an estimate the rate of exponential
 decay $\hat{\lambda}$ as:
 
 $$
-\hat{\lambda} = \frac{1}{\bar{x}},
+\hat{\lambda} = \frac{1}{\bar{x}}
 $$ and overlay an exponential function over the histogram using
 `dexp(..., rate = <lambda>)` in R:
 
@@ -137,7 +137,7 @@ assuming we know the uniform average recombination rate $r$ reasonably
 well, we can estimate the time of admixture $t$ as:
 
 $$
-t \approx \frac{\hat{\lambda}}{r}.
+t \approx \frac{\hat{\lambda}}{r}
 $$ For example, given a vector of tract lengths in this “10 ky old”
 simulated individual
 
