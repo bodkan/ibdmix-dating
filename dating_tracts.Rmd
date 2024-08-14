@@ -64,7 +64,7 @@ tracts <- ts_tracts(ts, census = t_admix, quiet = TRUE)
 ```
 
 ```{r, eval=!file.exists("data/sim_tracts.tsv")}
-tracts_df <- tracts %>% dplyr::select(-node_id, -pop, -source_pop, -source_pop_id)
+tracts_df <- tracts %>% dplyr::select(-pop, -source_pop, -source_pop_id)
 
 samples_df <- ts_samples(ts) %>% dplyr::rename(sample_age = time)
 

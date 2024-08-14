@@ -54,7 +54,7 @@ tracts <- ts_tracts(ts, census = t_admix, quiet = TRUE)
 ```
 
 ``` r
-tracts_df <- tracts %>% dplyr::select(-node_id, -pop, -source_pop, -source_pop_id)
+tracts_df <- tracts %>% dplyr::select(-pop, -source_pop, -source_pop_id)
 
 samples_df <- ts_samples(ts) %>% dplyr::rename(sample_age = time)
 
@@ -66,25 +66,25 @@ write.table(tracts_df, file = "data/sim_tracts.tsv",
 
 ``` r
 tracts_df <- read_tsv("data/sim_tracts.tsv")
-#> Rows: 4280 Columns: 6
+#> Rows: 4280 Columns: 7
 #> ── Column specification ────────────────────────────────────────────────────────
 #> Delimiter: "\t"
 #> chr (2): name, pop
-#> dbl (4): sample_age, left, right, length
+#> dbl (5): sample_age, node_id, left, right, length
 #> 
 #> ℹ Use `spec()` to retrieve the full column specification for this data.
 #> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
 
 head(tracts_df)
-#> # A tibble: 6 × 6
-#>   name  sample_age pop       left    right  length
-#>   <chr>      <dbl> <chr>    <dbl>    <dbl>   <dbl>
-#> 1 EUR_1      50000 EUR   19127220 19527944  400724
-#> 2 EUR_1      50000 EUR   50960983 51219943  258960
-#> 3 EUR_1      50000 EUR   54542568 55565589 1023021
-#> 4 EUR_1      50000 EUR   59782108 59938917  156809
-#> 5 EUR_1      50000 EUR   95275454 96092356  816902
-#> 6 EUR_1      50000 EUR     482833   887166  404333
+#> # A tibble: 6 × 7
+#>   name  sample_age pop   node_id     left    right  length
+#>   <chr>      <dbl> <chr>   <dbl>    <dbl>    <dbl>   <dbl>
+#> 1 EUR_1      50000 EUR         0 19127220 19527944  400724
+#> 2 EUR_1      50000 EUR         0 50960983 51219943  258960
+#> 3 EUR_1      50000 EUR         0 54542568 55565589 1023021
+#> 4 EUR_1      50000 EUR         0 59782108 59938917  156809
+#> 5 EUR_1      50000 EUR         0 95275454 96092356  816902
+#> 6 EUR_1      50000 EUR         1   482833   887166  404333
 ```
 
 ## How does admixture dating work?
