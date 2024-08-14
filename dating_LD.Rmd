@@ -31,24 +31,26 @@ library(plyranges)
 library(ggbio)
 library(BSgenome.Hsapiens.UCSC.hg19)
 
-library(slendr)
-init_env(quiet = TRUE)
-
 suppressPackageStartupMessages(source(here::here("utils.R")))
 ```
 
 ```{r, eval=file.exists("data/sim_tracts.tsv")}
-tracts_df <- read_tsv("data/sim_tracts.tsv") %>% filter(sample_age == 0)
+tracts_df <- read_tsv("data/sim_tracts.tsv")
 tracts_df$chrom <- "chr1"
 tracts_df$chrom_id <- paste0(tracts_df$name, "_", tracts_df$node_id)
 ```
 
-```{r}
-tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
+<!-- ```{r} -->
+<!-- metadata <- read_metadata() -->
+<!-- tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient")) -->
 
-tracts_df <- select(metadata, sampleId, ageAverage, sample_age, coverage) %>%
-  inner_join(tracts_df, by = c("sampleId" = "ID"))
-```
+<!-- tracts_df <- select(metadata, name = sampleId, ageAverage, coverage) %>% -->
+<!--   inner_join(tracts_df, by = c("name" = "ID")) %>% -->
+<!--   dplyr::rename(left = start, right = end) -->
+
+<!-- tracts_df <- tracts_df %>% filter(name == "Kostenki") %>% arrange(chrom, left, right) -->
+<!-- tracts_df$chrom_id <- tracts_df$chrom -->
+<!-- ``` -->
 
 ```{r}
 tracts_gr <- tracts_df %>%
@@ -59,40 +61,131 @@ tracts_gr <- tracts_df %>%
     ignore.strand = TRUE,
     starts.in.df.are.0based = TRUE
   )
+```
 
-seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
-genome(tracts_gr) <- "hg19"
-# seqlengths(tracts_gr) <- 100e6
+<!-- ```{r} -->
+<!-- seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))] -->
+<!-- genome(tracts_gr) <- "hg19" -->
+<!-- ``` -->
 
-tracts_gr
+```{r}
+seqlengths(tracts_gr) <- 100e6
 ```
 
 ```{r}
+tracts_gr
+```
+
+### Define positions of archaic ancestry informative sites
+
+```{r}
+interval <- 10e3
+
 sites_gr <- lapply(unique(tracts_df$chrom), function(chrom) {
-  interval <- 10000
   positions <- seq(from = 1, to = seqlengths(tracts_gr)[chrom], by = interval)
   
   gr <- GRanges(seqnames = chrom,
                 ranges = IRanges(start = positions, end = positions))
 }) %>% GRangesList() %>% unlist()
 
+mcols(sites_gr)$index <- seq_len(length(sites_gr))
+
 sites_gr
 ```
 
+### Define pairs of sites at given distances
+
 ```{r}
-chrom_id <- tracts_gr$chrom_id[1]
+distances <- seq(interval, 1e6, by = interval)
 
-ind_tracts_gr <- filter(tracts_gr, chrom_id == !!chrom_id)
-ind_sites_gr <- sites_gr
-
-# mark sites falling within an introgressed tract
-tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
-mcols(ind_sites_gr)$neand <- FALSE
-mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
-mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
-
-ind_sites_gr
+distances
 ```
+
+```{r}
+library(parallel)
+
+tstart <- Sys.time()
+pairs <- mclapply(distances, function(distance) {
+  pair1 <- c()
+  pair2 <- c()
+
+  for (i in ind_sites_gr$index) {
+    index1 <- i
+    index2 <- ind_sites_gr[start(ind_sites_gr) >= start(ind_sites_gr[i]) + distance]$index[1]
+  
+    if (is.na(index2)) break
+
+    pair1 <- c(pair1, index1)
+    pair2 <- c(pair2, index2)
+  }
+
+  list(pair1 = pair1, pair2 = pair2)
+}, mc.cores = detectCores())
+
+saveRDS(pairs, "dating_LD_pairs.rds")
+tend <- Sys.time()
+
+tend - tstart
+```
+
+### Compute covariance in a given individual
+
+```{r}
+tracts_gr$sample_age %>% unique
+tracts_gr$name %>% unique
+```
+
+```{r}
+library(parallel)
+
+cov_df <- mclapply(unique(tracts_gr$chrom_id), function(chrom_id) {
+  # name <- "EUR_60"
+  # chrom_ids <- filter(tracts_gr, name == !!name)$chrom_id %>% unique
+  # chrom_id <- "EUR_60_119"
+  
+  ind_tracts_gr <- tracts_gr %>% filter(chrom_id == !!chrom_id)
+  ind_sites_gr <- sites_gr
+  
+  # mark sites falling within an introgressed tract
+  tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
+  mcols(ind_sites_gr)$neand <- FALSE
+  mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
+  mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
+
+  covariances <- sapply(seq_along(distances), function(i) {
+    sites1 <- ind_sites_gr[pairs[[i]]$pair1]$neand
+    sites2 <- ind_sites_gr[pairs[[i]]$pair2]$neand
+    cov(sites1, sites2)
+  })
+
+  tibble(
+    chrom_id,
+    sample_age = unique(ind_tracts_gr$sample_age),
+    distance = distances,
+    covariance = covariances
+  )
+}, mc.cores = detectCores()) %>%
+  do.call(rbind, .)
+```
+
+```{r}
+cov_df %>%
+ggplot() +
+  geom_line(aes(distance, covariance, color = factor(sample_age), group = chrom_id)) +
+  facet_wrap(~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances)))
+```
+
+```{r}
+tracts_gr %>%
+as_tibble %>%
+ggplot() +
+  geom_density(aes(length, color = factor(sample_age), group = chrom_id)) +
+  facet_wrap(~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances)))
+```
+
+
 
 ```{r}
 ggplot() +
@@ -104,52 +197,6 @@ ggplot() +
   theme_bw() +
   theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank())
 ```
-
-```{r}
-distances <- seq(interval, 1e6, by = 10e3)
-distances
-```
-
-```{r}
-library(parallel)
-
-tstart <- Sys.time()
-pairs <- mclapply(distances, function(distance) {
-  alleles_a <- c()
-  alleles_b <- c()
-
-  for (i in seq_along(ind_sites_gr)) {
-    site_a <- ind_sites_gr[i]
-  
-    if (start(site_a) + distance > max(end(ind_sites_gr)))
-      break
-
-    site_b <- ind_sites_gr[start(ind_sites_gr) >= start(site_a) + distance][1]
-
-    alleles_a <- c(alleles_a, site_a$neand)
-    alleles_b <- c(alleles_b, site_b$neand)
-  }
-
-  list(a = alleles_a, b = alleles_b)
-}, mc.cores = detectCores())
-
-saveRDS(pairs, "dating_LD_pairs.rds")
-tend <- Sys.time()
-```
-
-```{r}
-tend - tstart
-```
-
-
-```{r}
-covariances <- sapply(pairs, function(p) cov(p$a, p$b))
-```
-
-```{r}
-plot(distances, covariances)
-```
-
 
 
 
