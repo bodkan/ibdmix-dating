@@ -16,8 +16,8 @@ knitr::opts_chunk$set(
 
 set.seed(42)
 
-unlink("dating_files", recursive = TRUE)
-unlink(list.files(".", "dating.*.pdf"), recursive = TRUE)
+unlink("dating_tracts_files", recursive = TRUE)
+unlink(list.files(".", "dating_tracts.*.pdf"), recursive = TRUE)
 ```
 
 ```{r}
@@ -236,7 +236,7 @@ max_length <- Inf
 
 results <- list()
 
-pdf("dating_sims.pdf", width = 14, height = 8)
+pdf("dating_tracts_sims.pdf", width = 14, height = 8)
 
 for (min_length in c(0, 50e3, 100e3)) {
 
@@ -430,7 +430,7 @@ cowplot::plot_grid(p_density2, p_time2, nrow = 2)
 ```{r}
 # min_length <- 0
 
-pdf("dating_sims_v2.pdf", width = 12, height = 10)
+pdf("dating_tracts_sims_v2.pdf", width = 12, height = 10)
 
 results_v2 <- list()
 
@@ -621,7 +621,7 @@ max_length <- Inf
 
 results <- list()
 
-pdf("dating_empirical.pdf", width = 14, height = 8)
+pdf("dating_tracts_empirical.pdf", width = 14, height = 8)
 
 for (min_length in c(50e3)) {
 
@@ -818,7 +818,7 @@ cowplot::plot_grid(p_time, p_time2, nrow = 2)
 ```{r}
 # min_length <- 50e3
 
-pdf("dating_empirical_v2.pdf", width = 12, height = 10)
+pdf("dating_tracts_empirical_v2.pdf", width = 12, height = 10)
 
 results_v2 <- list()
 
@@ -1055,3 +1055,6 @@ ggplot(tracts_df) +
   geom_hline(yintercept = c(50e3, 250e3), linetype = "dashed") +
   coord_cartesian(ylim = c(50e3, 250e3)) 
 ```
+
+## More elaborate LD covariance analysis
+
