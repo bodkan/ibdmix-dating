@@ -16,8 +16,8 @@ knitr::opts_chunk$set(
 
 set.seed(42)
 
-unlink("dating_files", recursive = TRUE)
-unlink(list.files(".", "dating.*.pdf"), recursive = TRUE)
+unlink("dating_LD_files", recursive = TRUE)
+unlink(list.files(".", "dating_LD.*.pdf"), recursive = TRUE)
 ```
 
 ```{r}
@@ -25,7 +25,11 @@ library(ggplot2)
 library(readr)
 library(dplyr)
 library(tidyr)
-library(Metrics)
+library(cowplot)
+
+library(plyranges)
+library(ggbio)
+library(BSgenome.Hsapiens.UCSC.hg19)
 
 library(slendr)
 init_env(quiet = TRUE)
@@ -34,8 +38,121 @@ suppressPackageStartupMessages(source(here::here("utils.R")))
 ```
 
 ```{r, eval=file.exists("data/sim_tracts.tsv")}
-tracts_df <- read_tsv("data/sim_tracts.tsv")
-
-head(tracts_df)
+tracts_df <- read_tsv("data/sim_tracts.tsv") %>% filter(sample_age == 0)
+tracts_df$chrom <- "chr1"
+tracts_df$chrom_id <- paste0(tracts_df$name, "_", tracts_df$node_id)
 ```
+
+```{r}
+tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
+
+tracts_df <- select(metadata, sampleId, ageAverage, sample_age, coverage) %>%
+  inner_join(tracts_df, by = c("sampleId" = "ID"))
+```
+
+```{r}
+tracts_gr <- tracts_df %>%
+  makeGRangesFromDataFrame(
+    start.field = "left",
+    end.field = "right",
+    keep.extra.columns = TRUE,
+    ignore.strand = TRUE,
+    starts.in.df.are.0based = TRUE
+  )
+
+seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
+genome(tracts_gr) <- "hg19"
+# seqlengths(tracts_gr) <- 100e6
+
+tracts_gr
+```
+
+```{r}
+sites_gr <- lapply(unique(tracts_df$chrom), function(chrom) {
+  interval <- 10000
+  positions <- seq(from = 1, to = seqlengths(tracts_gr)[chrom], by = interval)
+  
+  gr <- GRanges(seqnames = chrom,
+                ranges = IRanges(start = positions, end = positions))
+}) %>% GRangesList() %>% unlist()
+
+sites_gr
+```
+
+```{r}
+chrom_id <- tracts_gr$chrom_id[1]
+
+ind_tracts_gr <- filter(tracts_gr, chrom_id == !!chrom_id)
+ind_sites_gr <- sites_gr
+
+# mark sites falling within an introgressed tract
+tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
+mcols(ind_sites_gr)$neand <- FALSE
+mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
+mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
+
+ind_sites_gr
+```
+
+```{r}
+ggplot() +
+  geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
+  geom_point(data = filter(as.data.frame(ind_sites_gr), neand == 1), aes(x = start, y = 0.05), size = 0.1, color = "red") +
+  geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
+  scale_x_continuous(labels = scales::comma) +
+  expand_limits(x = 0) +
+  theme_bw() +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank())
+```
+
+```{r}
+distances <- seq(interval, 1e6, by = 10e3)
+distances
+```
+
+```{r}
+library(parallel)
+
+tstart <- Sys.time()
+pairs <- mclapply(distances, function(distance) {
+  alleles_a <- c()
+  alleles_b <- c()
+
+  for (i in seq_along(ind_sites_gr)) {
+    site_a <- ind_sites_gr[i]
+  
+    if (start(site_a) + distance > max(end(ind_sites_gr)))
+      break
+
+    site_b <- ind_sites_gr[start(ind_sites_gr) >= start(site_a) + distance][1]
+
+    alleles_a <- c(alleles_a, site_a$neand)
+    alleles_b <- c(alleles_b, site_b$neand)
+  }
+
+  list(a = alleles_a, b = alleles_b)
+}, mc.cores = detectCores())
+
+saveRDS(pairs, "dating_LD_pairs.rds")
+tend <- Sys.time()
+```
+
+```{r}
+tend - tstart
+```
+
+
+```{r}
+covariances <- sapply(pairs, function(p) cov(p$a, p$b))
+```
+
+```{r}
+plot(distances, covariances)
+```
+
+
+
+
+
+
 
