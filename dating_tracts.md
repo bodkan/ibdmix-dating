@@ -127,7 +127,9 @@ decay $\hat{\lambda}$ as:
 
 $$
 \hat{\lambda} = \frac{1}{\bar{x}}
-$$ and overlay an exponential function over the histogram using
+$$
+
+and overlay an exponential function over the histogram using
 `dexp(..., rate = <lambda>)` in R:
 
 ![](dating_tracts_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
@@ -138,7 +140,9 @@ well, we can estimate the time of admixture $t$ as:
 
 $$
 t \approx \frac{\hat{\lambda}}{r}
-$$ For example, given a vector of tract lengths in this “10 ky old”
+$$
+
+For example, given a vector of tract lengths in this “10 ky old”
 simulated individual
 
 ``` r
@@ -604,13 +608,29 @@ metadata %>%
 ![](dating_tracts_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
 ``` r
-tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
+tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient"))
+#> Rows: 4172 Columns: 32
+#> ── Column specification ────────────────────────────────────────────────────────
+#> Delimiter: "\t"
+#> chr (22): sampleId, popId, site, country, region, groupLabel, groupAge, flag...
+#> dbl (10): shapeA, latitude, longitude, age14C, ageHigh, ageLow, ageAverage, ...
+#> 
+#> ℹ Use `spec()` to retrieve the full column specification for this data.
+#> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
 #> Rows: 1272453 Columns: 26
 #> ── Column specification ────────────────────────────────────────────────────────
 #> Delimiter: "\t"
 #> chr  (8): ID, population, superpop, region, clusterAlias, pop, groupAge, arc...
 #> dbl (17): ageAverage, chrom, start, end, slod, sites, positive_lods, negativ...
 #> lgl  (1): anc
+#> 
+#> ℹ Use `spec()` to retrieve the full column specification for this data.
+#> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+#> Rows: 4172 Columns: 32
+#> ── Column specification ────────────────────────────────────────────────────────
+#> Delimiter: "\t"
+#> chr (22): sampleId, popId, site, country, region, groupLabel, groupAge, flag...
+#> dbl (10): shapeA, latitude, longitude, age14C, ageHigh, ageLow, ageAverage, ...
 #> 
 #> ℹ Use `spec()` to retrieve the full column specification for this data.
 #> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
@@ -1095,13 +1115,29 @@ the right by `c`.
 ## Sanity checks of my filtering against Alba’s Figure 2. B/C
 
 ``` r
-tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
+tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient"))
+#> Rows: 4172 Columns: 32
+#> ── Column specification ────────────────────────────────────────────────────────
+#> Delimiter: "\t"
+#> chr (22): sampleId, popId, site, country, region, groupLabel, groupAge, flag...
+#> dbl (10): shapeA, latitude, longitude, age14C, ageHigh, ageLow, ageAverage, ...
+#> 
+#> ℹ Use `spec()` to retrieve the full column specification for this data.
+#> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
 #> Rows: 1272453 Columns: 26
 #> ── Column specification ────────────────────────────────────────────────────────
 #> Delimiter: "\t"
 #> chr  (8): ID, population, superpop, region, clusterAlias, pop, groupAge, arc...
 #> dbl (17): ageAverage, chrom, start, end, slod, sites, positive_lods, negativ...
 #> lgl  (1): anc
+#> 
+#> ℹ Use `spec()` to retrieve the full column specification for this data.
+#> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
+#> Rows: 4172 Columns: 32
+#> ── Column specification ────────────────────────────────────────────────────────
+#> Delimiter: "\t"
+#> chr (22): sampleId, popId, site, country, region, groupLabel, groupAge, flag...
+#> dbl (10): shapeA, latitude, longitude, age14C, ageHigh, ageLow, ageAverage, ...
 #> 
 #> ℹ Use `spec()` to retrieve the full column specification for this data.
 #> ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.

@@ -120,6 +120,7 @@ From this, we can therefore get an estimate the rate of exponential decay $\hat{
 $$
 \hat{\lambda} = \frac{1}{\bar{x}}
 $$
+
 and overlay an exponential function over the histogram using `dexp(..., rate = <lambda>)` in R:
 
 ```{r, echo=FALSE}
@@ -137,6 +138,7 @@ But more importantly, because we know that $\lambda = 1 / (r t)$, assuming we kn
 $$
 t \approx \frac{\hat{\lambda}}{r}
 $$
+
 For example, given a vector of tract lengths in this "10 ky old" simulated individual
 
 ```{r}
@@ -1007,7 +1009,7 @@ Basically, what we're doing by this is take the truncated distribution (truncate
 ## Sanity checks of my filtering against Alba's Figure 2. B/C
 
 ```{r}
-tracts_df <- rbind(read_tracts("Modern", metadata), read_tracts("Ancient", metadata))
+tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient"))
 
 tracts_df <- select(metadata, sampleId, ageAverage, coverage) %>%
   inner_join(tracts_df, by = c("sampleId" = "ID"))
