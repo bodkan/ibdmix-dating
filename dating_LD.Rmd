@@ -157,7 +157,7 @@ interval <- 10e3
 sites_grl <- generate_info_sites(tracts_gr, interval = interval)
 distances <- seq(interval, 1e6, by = interval)
 
-unlink("dating_LD_pairs_regular.rds")
+# unlink("dating_LD_pairs_regular.rds")
 if (file.exists("dating_LD_pairs_regular.rds")) {
   pairs <- readRDS("dating_LD_pairs.rds")
 } else {
@@ -179,19 +179,14 @@ tracts_gr$name %>% unique
 ```
 
 ```{r}
-library(parallel)
-
 compute_covariances <- function(tracts_gr, sites_grl) {
-  chr_pairs <- lapply(seqlevels(sites_grl), function(chrom) {
+  lapply(seqlevels(sites_grl), function(chrom) {
 
-    sites_gr <- sites_grl[seqnames(sites_grl) == chrom, ][[1]]
+    sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
 
-    parallel::mclapply(unique(tracts_gr$chrom_id), function(chrom_id) {
-      # name <- "EUR_60"
-      # chrom_ids <- filter(tracts_gr, name == !!name)$chrom_id %>% unique
-      # chrom_id <- "EUR_60_119"
+    parallel::mclapply(unique(tracts_gr$name), function(name) {
       
-      ind_tracts_gr <- tracts_gr %>% filter(chrom_id == !!chrom_id)
+      ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom)
       ind_sites_gr <- sites_gr
       
       # mark sites falling within an introgressed tract
@@ -201,34 +196,47 @@ compute_covariances <- function(tracts_gr, sites_grl) {
       mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
     
       covariances <- sapply(seq_along(distances), function(i) {
-        sites1 <- ind_sites_gr[pairs[[i]]$pair1]$neand
-        sites2 <- ind_sites_gr[pairs[[i]]$pair2]$neand
+        sites1 <- ind_sites_gr[pairs[[chrom]][[i]]$pair1]$neand
+        sites2 <- ind_sites_gr[pairs[[chrom]][[i]]$pair2]$neand
         cov(sites1, sites2)
       })
 
-  tibble(
-    chrom_id,
-    sample_age = unique(ind_tracts_gr$sample_age),
-    distance = distances,
-    covariance = covariances
-  )
-}, mc.cores = detectCores()) %>%
-  do.call(rbind, .)
+      tibble(
+        chrom = chrom,
+        name = name,
+        sample_age = unique(ind_tracts_gr$sample_age),
+        distance = distances,
+        covariance = covariances
+      )
+    }, mc.cores = detectCores()) %>% do.call(rbind, .)
+  }) %>% do.call(rbind, .)
+}
 ```
+
+```{r}
+cov_df <- compute_covariances(tracts_gr, sites_grl)
+```
+
+
+
 
 ```{r}
 cov_df %>%
 ggplot() +
-  geom_line(aes(distance, covariance, color = factor(sample_age), group = chrom_id)) +
-  facet_wrap(~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances)))
+  geom_line(aes(distance, covariance, color = factor(sample_age), group = name)) +
+  geom_vline(xintercept = c(0, 100e3, 200e3, 300e3)) +
+  facet_grid(chrom ~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances))) +
+  theme(legend.position = "bottom")
+
+ggplot2::ggsave(filename = "LD_new.pdf")
 ```
 
 ```{r}
 tracts_gr %>%
 as_tibble %>%
 ggplot() +
-  geom_density(aes(length, color = factor(sample_age), group = chrom_id)) +
+  geom_density(aes(length, color = factor(sample_age), group = name)) +
   facet_wrap(~ sample_age) +
   coord_cartesian(xlim = c(0, max(distances)))
 ```
@@ -236,9 +244,12 @@ ggplot() +
 
 
 ```{r}
+chrom <- "chr1_1"
+name <- "EUR_60"
+
 ggplot() +
   geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
-  geom_point(data = filter(as.data.frame(ind_sites_gr), neand == 1), aes(x = start, y = 0.05), size = 0.1, color = "red") +
+  geom_point(data = as.data.frame(filter(ind_sites_gr, neand == 1)), aes(x = start, y = 0.05), size = 0.1, color = "red") +
   geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
   scale_x_continuous(labels = scales::comma) +
   expand_limits(x = 0) +
