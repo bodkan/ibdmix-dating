@@ -35,9 +35,14 @@ suppressPackageStartupMessages(source(here::here("utils.R")))
 ```
 
 ```{r, eval=file.exists("data/sim_tracts.tsv")}
-tracts_df <- read_tsv("data/sim_tracts.tsv")
-tracts_df$chrom <- "chr1"
-tracts_df$chrom_id <- paste0(tracts_df$name, "_", tracts_df$node_id)
+tracts_df <-
+  read_tsv("data/sim_tracts.tsv") %>%
+  group_by(name) %>%
+  mutate(haplotype = dense_rank(node_id),
+         chrom = paste0("chr1_", haplotype)) %>%
+  ungroup()
+
+tracts_df
 ```
 
 <!-- ```{r} -->
@@ -69,7 +74,7 @@ tracts_gr <- tracts_df %>%
 <!-- ``` -->
 
 ```{r}
-seqlengths(tracts_gr) <- 100e6
+seqlengths(tracts_gr) <- rep(100e6, 2)
 ```
 
 ```{r}
@@ -79,54 +84,92 @@ tracts_gr
 ### Define positions of archaic ancestry informative sites
 
 ```{r}
-interval <- 10e3
+generate_info_sites <- function(tracts_gr, interval) {
+  sites_grl <- lapply(seqlevels(tracts_gr), function(chrom) {
+    positions <- seq(from = 1, to = seqlengths(tracts_gr)[chrom], by = interval)
 
-sites_gr <- lapply(unique(tracts_df$chrom), function(chrom) {
-  positions <- seq(from = 1, to = seqlengths(tracts_gr)[chrom], by = interval)
-  
-  gr <- GRanges(seqnames = chrom,
-                ranges = IRanges(start = positions, end = positions))
-}) %>% GRangesList() %>% unlist()
+    gr <- GRanges(seqnames = chrom, ranges = IRanges(start = positions, end = positions))
+    mcols(gr)$index <- seq_len(length(gr))
 
-mcols(sites_gr)$index <- seq_len(length(sites_gr))
+    gr
+  }) %>% GRangesList()
+  seqlevels(sites_grl) <- seqlevels(tracts_gr)
+  seqlengths(sites_grl) <- seqlengths(tracts_gr)
 
-sites_gr
+  sites_grl
+}
 ```
 
 ### Define pairs of sites at given distances
 
 ```{r}
-distances <- seq(interval, 1e6, by = interval)
+# Generate list of indices of all pairs of loci at given distances
+# (one element of the list for each distance bin)
+collect_pairs <- function(sites_grl, distances, ncores = parallel::detectCores()) {
 
-distances
+  chr_pairs <- lapply(seqlevels(sites_grl), function(chrom) {
+
+    sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
+
+    pairs <- parallel::mclapply(distances, function(distance) {
+
+        pair1 <- c()
+        pair2 <- c()
+
+        # iterate through each site one by one...
+        for (i in sites_gr$index) {
+          index1 <- i
+          # ... and find the index of the first site that is at a given distance
+          index2 <- sites_gr[
+            (start(sites_gr) >= start(sites_gr[i]) + distance - distance / 10) & 
+            (start(sites_gr) <= start(sites_gr[i]) + distance  + distance / 10)
+          ]$index[1]
+
+          if (is.na(index2)) {
+            if (seqlengths(sites_gr)[chrom] < start(sites_gr[i]) + distance  + distance / 10)
+              break
+            else
+              next
+          }
+
+          # otherwise record the indices of the pair of sites and proceed with searching
+          # for the next pair
+          pair1 <- c(pair1, index1)
+          pair2 <- c(pair2, index2)
+        }
+
+        list(pair1 = pair1, pair2 = pair2)
+
+      }, mc.cores = ncores)
+
+    pairs
+
+  })
+
+  names(chr_pairs) <- seqlevels(sites_grl)
+  chr_pairs
+}
 ```
 
 ```{r}
-library(parallel)
+interval <- 10e3
 
-tstart <- Sys.time()
-pairs <- mclapply(distances, function(distance) {
-  pair1 <- c()
-  pair2 <- c()
+sites_grl <- generate_info_sites(tracts_gr, interval = interval)
+distances <- seq(interval, 1e6, by = interval)
 
-  for (i in ind_sites_gr$index) {
-    index1 <- i
-    index2 <- ind_sites_gr[start(ind_sites_gr) >= start(ind_sites_gr[i]) + distance]$index[1]
-  
-    if (is.na(index2)) break
+unlink("dating_LD_pairs_regular.rds")
+if (file.exists("dating_LD_pairs_regular.rds")) {
+  pairs <- readRDS("dating_LD_pairs.rds")
+} else {
+  tstart <- Sys.time()
+  pairs <- collect_pairs(sites_grl, distances)
+  tend <- Sys.time()
 
-    pair1 <- c(pair1, index1)
-    pair2 <- c(pair2, index2)
-  }
-
-  list(pair1 = pair1, pair2 = pair2)
-}, mc.cores = detectCores())
-
-saveRDS(pairs, "dating_LD_pairs.rds")
-tend <- Sys.time()
-
-tend - tstart
+  print(tend - tstart)
+  saveRDS(pairs, "dating_LD_pairs_regular.rds")
+}
 ```
+
 
 ### Compute covariance in a given individual
 
@@ -138,25 +181,30 @@ tracts_gr$name %>% unique
 ```{r}
 library(parallel)
 
-cov_df <- mclapply(unique(tracts_gr$chrom_id), function(chrom_id) {
-  # name <- "EUR_60"
-  # chrom_ids <- filter(tracts_gr, name == !!name)$chrom_id %>% unique
-  # chrom_id <- "EUR_60_119"
-  
-  ind_tracts_gr <- tracts_gr %>% filter(chrom_id == !!chrom_id)
-  ind_sites_gr <- sites_gr
-  
-  # mark sites falling within an introgressed tract
-  tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
-  mcols(ind_sites_gr)$neand <- FALSE
-  mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
-  mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
+compute_covariances <- function(tracts_gr, sites_grl) {
+  chr_pairs <- lapply(seqlevels(sites_grl), function(chrom) {
 
-  covariances <- sapply(seq_along(distances), function(i) {
-    sites1 <- ind_sites_gr[pairs[[i]]$pair1]$neand
-    sites2 <- ind_sites_gr[pairs[[i]]$pair2]$neand
-    cov(sites1, sites2)
-  })
+    sites_gr <- sites_grl[seqnames(sites_grl) == chrom, ][[1]]
+
+    parallel::mclapply(unique(tracts_gr$chrom_id), function(chrom_id) {
+      # name <- "EUR_60"
+      # chrom_ids <- filter(tracts_gr, name == !!name)$chrom_id %>% unique
+      # chrom_id <- "EUR_60_119"
+      
+      ind_tracts_gr <- tracts_gr %>% filter(chrom_id == !!chrom_id)
+      ind_sites_gr <- sites_gr
+      
+      # mark sites falling within an introgressed tract
+      tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
+      mcols(ind_sites_gr)$neand <- FALSE
+      mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
+      mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
+    
+      covariances <- sapply(seq_along(distances), function(i) {
+        sites1 <- ind_sites_gr[pairs[[i]]$pair1]$neand
+        sites2 <- ind_sites_gr[pairs[[i]]$pair2]$neand
+        cov(sites1, sites2)
+      })
 
   tibble(
     chrom_id,
