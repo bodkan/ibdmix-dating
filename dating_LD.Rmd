@@ -223,11 +223,13 @@ cov_df <- compute_covariances(tracts_gr, sites_grl)
 ```{r}
 cov_df %>%
 ggplot() +
-  geom_line(aes(distance, covariance, color = factor(sample_age), group = name)) +
-  geom_vline(xintercept = c(0, 100e3, 200e3, 300e3)) +
-  facet_grid(chrom ~ sample_age) +
+  # geom_line(aes(distance, covariance, color = factor(sample_age), group = name)) +
+  geom_vline(xintercept = c(90e3, 100e3, 200e3, 300e3)) +
+  geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
+  # facet_grid(chrom ~ sample_age) +
+  facet_wrap(~ sample_age) +
   coord_cartesian(xlim = c(0, max(distances))) +
-  theme(legend.position = "bottom")
+  theme(legend.position = "right")
 
 ggplot2::ggsave(filename = "LD_new.pdf")
 ```
