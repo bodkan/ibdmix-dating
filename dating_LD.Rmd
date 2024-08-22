@@ -31,6 +31,9 @@ library(plyranges)
 library(ggbio)
 library(BSgenome.Hsapiens.UCSC.hg19)
 
+library(slendr)
+init_env()
+
 suppressPackageStartupMessages(source(here::here("utils.R")))
 ```
 
@@ -163,7 +166,7 @@ distances <- seq(interval, 1e6, by = interval)
 
 # unlink("dating_LD_pairs_regular.rds")
 if (file.exists("dating_LD_pairs_regular.rds")) {
-  pairs <- readRDS("dating_LD_pairs.rds")
+  pairs <- readRDS("dating_LD_pairs_regular.rds")
 } else {
   tstart <- Sys.time()
   pairs <- collect_pairs(sites_grl, distances)
@@ -263,7 +266,7 @@ mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
     
 ggplot() +
   geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
-  geom_point(data = as.data.frame(filter(ind_sites_gr, neand == 1)), aes(x = start, y = 0.05), size = 0.1, color = "red") +
+  geom_point(data = as.data.frame(filter(ind_sites_gr, neand == 1)), aes(x = start, y = 0.05), size = 0.1, color = "black") +
   geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
   scale_x_continuous(labels = scales::comma) +
   expand_limits(x = 0) +
@@ -275,56 +278,31 @@ ggplot() +
 
 ## Fitting exponential distribution to covariances
 
-```{r}
-sample_age <- 40000
-name <- sample(filter(cov_df, sample_age == !!sample_age)$name, 1)
-chrom <- sample(filter(cov_df, sample_age == !!sample_age)$chrom, 1)
+<!-- ```{r} -->
+<!-- sample_age <- 40000 -->
+<!-- name <- sample(filter(cov_df, sample_age == !!sample_age)$name, 1) -->
+<!-- chrom <- sample(filter(cov_df, sample_age == !!sample_age)$chrom, 1) -->
 
-gen_time <- 27
-r <- 1e-8
+<!-- gen_time <- 27 -->
+<!-- r <- 1e-8 -->
 
-data_df <- filter(cov_df, name == !!name, chrom == !!chrom) #sample_age == !!sample_age)
+<!-- data_df <- filter(cov_df, name == !!name, chrom == !!chrom) #sample_age == !!sample_age) -->
 
-# nls_res <- nls(covariance ~ exp(-lambda * distance * r) + c, 
-#                data = data_df,  start = list(A = 1, lambda = 1/50000, c = 0))
+<!-- # nls_res <- nls(covariance ~ exp(-lambda * distance * r) + c,  -->
+<!-- #                data = data_df,  start = list(A = 1, lambda = 1/50000, c = 0)) -->
 
-nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df)
+<!-- nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df) -->
 
-summary(nls_res)
+<!-- summary(nls_res) -->
 
-plot(data_df$distance, data_df$covariance)
-y_nls <- predict(nls_res, newdata = data_df[, c("sample_age", "distance")]) %>% as.vector
-lines(data_df$distance, y_nls)
+<!-- plot(data_df$distance, data_df$covariance) -->
+<!-- y_nls <- predict(nls_res, newdata = data_df[, c("sample_age", "distance")]) %>% as.vector -->
+<!-- lines(data_df$distance, y_nls) -->
 
-lambda_nls <- exp(coef(nls_res)["lrc"])
-(t_gens_nls <- lambda_nls / r)
-(t_nls <- t_gens_nls * gen_time + sample_age)
-```
-
-```{r}
-fit_df <- expand_grid(chrom = seqlevels(tracts_gr), name = unique(tracts_gr$name)) %>%
-  rowwise() %>%
-  mutate(fit_data = list((
-    function(chrom, name) {
-      data_df <- filter(cov_df, name == !!name, chrom == !!chrom)
-      nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df)
-    
-      df <- tibble(
-        distance = data_df$distance,
-        covariance = predict(nls_res, newdata = data_df[, "distance"])
-      )
-    
-      tibble(
-        sample_age = sample_age,
-        lambda = exp(coef(nls_res)["lrc"]),
-        t_gens_before = lambda / r,
-        t_admix = t_gens_before * gen_time + sample_age,
-        fit = list(df)
-      )
-    })(chrom, name)
-  )) %>%
-    unnest(cols = c(fit_data))
-```
+<!-- lambda_nls <- exp(coef(nls_res)["lrc"]) -->
+<!-- (t_gens_nls <- lambda_nls / r) -->
+<!-- (t_nls <- t_gens_nls * gen_time + sample_age) -->
+<!-- ``` -->
 
 ```{r}
 grid_df <- expand_grid(chrom = seqlevels(tracts_gr), name = unique(tracts_gr$name))
@@ -357,7 +335,7 @@ fit_df <- lapply(1:nrow(grid_df), function(i) {
 
 
 ```{r}
-sample_age <- 40000
+sample_age <- 0
 name <- sample(filter(cov_df, sample_age == !!sample_age)$name, 1)
 
 ind_cov_df <- filter(cov_df, name == !!name)
@@ -382,43 +360,92 @@ ggplot(aes(sample_age, t_admix, group = sample_age)) +
 
 
 
-### Exponential fitting across all individuals
+<!-- ### Exponential fitting across all individuals -->
+<!-- ```{r} -->
+<!-- fit_df <- lapply(c(0, 10e3, 20e3, 30e3, 40e3, 50e3), function(sample_age) { -->
+<!--   data_df <- filter(cov_df, sample_age == !!sample_age) -->
+<!--   nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df) -->
+
+<!--   df <- tibble( -->
+<!--     distance = data_df$distance, -->
+<!--     covariance = predict(nls_res, newdata = data_df[, "distance"]) -->
+<!--   ) -->
+
+<!--   tibble( -->
+<!--     sample_age = sample_age, -->
+<!--     lambda = exp(coef(nls_res)["lrc"]), -->
+<!--     t_gens_before = lambda / r, -->
+<!--     t_admix = t_gens_before * gen_time + sample_age, -->
+<!--     fit = list(df) -->
+<!--   ) -->
+<!-- }) %>% do.call(rbind, .) -->
+
+<!-- fit_df -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- p_fit <- ggplot() + -->
+<!--   geom_line(data = cov_df, aes(distance, covariance, color = factor(sample_age))) + -->
+<!--   geom_line(data = unnest(fit_df, fit), aes(distance, covariance, color = factor(sample_age)), linetype = "dashed") -->
+
+<!-- p_fit -->
+
+<!-- p_fit + facet_wrap(~ sample_age) + -->
+<!--   geom_line(data = unnest(fit_df, fit), aes(distance, covariance), linetype = "dashed") -->
+<!-- ``` -->
+
+## Dating admixture using genotype data
+
 ```{r}
-fit_df <- lapply(c(0, 10e3, 20e3, 30e3, 40e3, 50e3), function(sample_age) {
-  data_df <- filter(cov_df, sample_age == !!sample_age)
-  nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df)
+model <- read_model("dating_model")
+ts <- ts_load("dating.trees", model = model)
 
-  df <- tibble(
-    distance = data_df$distance,
-    covariance = predict(nls_res, newdata = data_df[, "distance"])
-  )
-
-  tibble(
-    sample_age = sample_age,
-    lambda = exp(coef(nls_res)["lrc"]),
-    t_gens_before = lambda / r,
-    t_admix = t_gens_before * gen_time + sample_age,
-    fit = list(df)
-  )
-}) %>% do.call(rbind, .)
-
-fit_df
+gt <- ts_genotypes(ts)
 ```
 
-
 ```{r}
-p_fit <- ggplot() +
-  geom_line(data = cov_df, aes(distance, covariance, color = factor(sample_age))) +
-  geom_line(data = unnest(fit_df, fit), aes(distance, covariance, color = factor(sample_age)), linetype = "dashed")
+afr_gt <- select(gt, starts_with("AFR"))
+nea_gt <- select(gt, starts_with("NEA"))
 
-p_fit
+fixed_afr <- rowMeans(afr_gt) == 0
+fixed_nea <- rowMeans(nea_gt) == 1
 
-p_fit + facet_wrap(~ sample_age) +
-  geom_line(data = unnest(fit_df, fit), aes(distance, covariance), linetype = "dashed")
+fixed_sites <- fixed_afr & fixed_nea
+
+info_gt <- gt[fixed_sites, ]
 ```
 
+```{r}
+sites_grl <- GRangesList(list(
+  makeGRangesFromDataFrame(mutate(info_gt, chrom = "chr1_1"), start.field = "pos", end.field = "pos"),
+  makeGRangesFromDataFrame(mutate(info_gt, chrom = "chr1_2"), start.field = "pos", end.field = "pos")
+))
+seqlevels(sites_grl) <- seqlevels(tracts_gr)
+seqlengths(sites_grl) <- seqlengths(tracts_gr)
 
+interval <- 10e3
 
+distances <- seq(interval, 1e6, by = interval)
+
+# unlink("dating_LD_pairs_regular.rds")
+if (file.exists("dating_LD_pairs_mutated.rds")) {
+  pairs <- readRDS("dating_LD_pairs_mutated.rds")
+} else {
+  tstart <- Sys.time()
+  pairs <- collect_pairs(sites_grl, distances)
+  tend <- Sys.time()
+
+  print(tend - tstart)
+  saveRDS(pairs, "dating_LD_pairs_mutated.rds")
+}
+```
+
+```{r}
+length_cutoff <- 50e3
+
+cov_df <- compute_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
+```
 
 
 
