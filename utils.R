@@ -7,6 +7,9 @@ library(parallel)
 library(GenomicRanges)
 library(plyranges)
 
+
+# i/o functions -------------------------------------------------------------------------------
+
 read_metadata <- function() {
   raw_info <- read_tsv("data/neo.impute.1000g.sampleInfo_clusterInfo.txt")
 
@@ -36,6 +39,8 @@ read_tracts <- function(set) {
 
   tracts
 }
+
+# archaic deserts -----------------------------------------------------------------------------
 
 generate_windows <- function(gaps_gr, window_size, step_size) {
   autosomes_gr <- GenomeInfoDb::getChromInfoFromUCSC("hg19") %>%
@@ -213,4 +218,102 @@ plot_desert_ancestry2 <- function(ancestry_gr, deserts_gr, chrom) {
         ggtitle(paste("Archaic ancestry desert on chromosome", gsub("chr", "", .$chrom[1])))
     }
 
+}
+
+# LD-based admixture dating -------------------------------------------------------------------
+
+# Define positions of archaic ancestry informative sites
+generate_info_sites <- function(tracts_gr, interval) {
+  sites_grl <- lapply(seqlevels(tracts_gr), function(chrom) {
+    positions <- seq(from = 1, to = seqlengths(tracts_gr)[chrom], by = interval)
+
+    gr <- GRanges(seqnames = chrom, ranges = IRanges(start = positions, end = positions))
+    mcols(gr)$index <- seq_len(length(gr))
+
+    gr
+  }) %>% GRangesList()
+  seqlevels(sites_grl) <- seqlevels(tracts_gr)
+  seqlengths(sites_grl) <- seqlengths(tracts_gr)
+
+  sites_grl
+}
+
+# Define list of pairs of sites at given distances
+# (one element of the list for each distance bin)
+collect_pairs <- function(sites_grl, distances, ncores = parallel::detectCores()) {
+
+  chroms <- sapply(sites_grl, function(x) as.character(unique(seqnames(x))))
+
+  chr_pairs <- lapply(chroms, function(chrom) {
+
+    sites_gr <- sites_grl[chroms == chrom, ] %>% unlist
+
+    pairs <- parallel::mclapply(distances, function(distance) {
+
+      pair1 <- c()
+      pair2 <- c()
+
+      # iterate through each site one by one...
+      for (i in sites_gr$index) {
+        index1 <- i
+        # ... and find the index of the first site that is at a given distance
+        index2 <- sites_gr[start(sites_gr) >= start(sites_gr[i]) + distance]$index[1]
+
+        if (is.na(index2)) {
+          if (seqlengths(sites_gr)[chrom] < start(sites_gr[i]) + distance  + distance / 10)
+            break
+          else
+            next
+        }
+
+        # otherwise record the indices of the pair of sites and proceed with searching
+        # for the next pair
+        pair1 <- c(pair1, index1)
+        pair2 <- c(pair2, index2)
+      }
+
+      list(pair1 = pair1, pair2 = pair2)
+
+    }, mc.cores = ncores)
+
+    pairs
+
+  })
+
+  names(chr_pairs) <- chroms
+  chr_pairs
+}
+
+# Compute covariances of allele states at pairs of sites
+compute_covariances <- function(tracts_gr, sites_grl, pairs) {
+  lapply(seqlevels(sites_grl), function(chrom) {
+
+    sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
+
+    parallel::mclapply(unique(tracts_gr$name), function(name) {
+
+      ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom)
+      ind_sites_gr <- sites_gr
+
+      # mark sites falling within an introgressed tract
+      tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
+      mcols(ind_sites_gr)$neand <- FALSE
+      mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
+      mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
+
+      covariances <- sapply(seq_along(distances), function(i) {
+        sites1 <- ind_sites_gr[pairs[[chrom]][[i]]$pair1]$neand
+        sites2 <- ind_sites_gr[pairs[[chrom]][[i]]$pair2]$neand
+        cov(sites1, sites2)
+      })
+
+      tibble(
+        chrom = chrom,
+        name = name,
+        sample_age = unique(ind_tracts_gr$sample_age),
+        distance = distances,
+        covariance = covariances
+      )
+    }, mc.cores = detectCores()) %>% do.call(rbind, .)
+  }) %>% do.call(rbind, .)
 }

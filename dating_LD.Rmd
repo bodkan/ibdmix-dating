@@ -44,6 +44,8 @@ gen_time <- 27
 t_admix <- round(55000 / gen_time) * gen_time
 ```
 
+## Read simulated admixture tracts
+
 ```{r, eval=file.exists("data/sim_tracts.tsv")}
 tracts_df <-
   read_tsv("data/sim_tracts.tsv") %>%
@@ -91,72 +93,9 @@ seqlengths(tracts_gr) <- rep(100e6, 2)
 tracts_gr
 ```
 
-### Define positions of archaic ancestry informative sites
+## Admixture dating using regularly-spaced loci
 
-```{r}
-generate_info_sites <- function(tracts_gr, interval) {
-  sites_grl <- lapply(seqlevels(tracts_gr), function(chrom) {
-    positions <- seq(from = 1, to = seqlengths(tracts_gr)[chrom], by = interval)
-
-    gr <- GRanges(seqnames = chrom, ranges = IRanges(start = positions, end = positions))
-    mcols(gr)$index <- seq_len(length(gr))
-
-    gr
-  }) %>% GRangesList()
-  seqlevels(sites_grl) <- seqlevels(tracts_gr)
-  seqlengths(sites_grl) <- seqlengths(tracts_gr)
-
-  sites_grl
-}
-```
-
-### Define pairs of sites at given distances
-
-```{r}
-# Generate list of indices of all pairs of loci at given distances
-# (one element of the list for each distance bin)
-collect_pairs <- function(sites_grl, distances, ncores = parallel::detectCores()) {
-
-  chr_pairs <- lapply(seqlevels(sites_grl), function(chrom) {
-
-    sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
-
-    pairs <- parallel::mclapply(distances, function(distance) {
-
-        pair1 <- c()
-        pair2 <- c()
-
-        # iterate through each site one by one...
-        for (i in sites_gr$index) {
-          index1 <- i
-          # ... and find the index of the first site that is at a given distance
-          index2 <- sites_gr[start(sites_gr) >= start(sites_gr[i]) + distance]$index[1]
-
-          if (is.na(index2)) {
-            if (seqlengths(sites_gr)[chrom] < start(sites_gr[i]) + distance  + distance / 10)
-              break
-            else
-              next
-          }
-
-          # otherwise record the indices of the pair of sites and proceed with searching
-          # for the next pair
-          pair1 <- c(pair1, index1)
-          pair2 <- c(pair2, index2)
-        }
-
-        list(pair1 = pair1, pair2 = pair2)
-
-      }, mc.cores = ncores)
-
-    pairs
-
-  })
-
-  names(chr_pairs) <- seqlevels(sites_grl)
-  chr_pairs
-}
-```
+### Define regularly spaced ancestry-informative sites
 
 ```{r}
 interval <- 10e3
@@ -164,12 +103,15 @@ interval <- 10e3
 sites_grl <- generate_info_sites(tracts_gr, interval = interval)
 distances <- seq(interval, 1e6, by = interval)
 
-# unlink("dating_LD_pairs_regular.rds")
 if (file.exists("dating_LD_pairs_regular.rds")) {
   pairs <- readRDS("dating_LD_pairs_regular.rds")
 } else {
   tstart <- Sys.time()
-  pairs <- collect_pairs(sites_grl, distances)
+
+  pairs <- collect_pairs(sites_grl[1], distances)
+  pairs <- lapply(seqlevels(sites_grl), function(chr) pairs[[1]])
+  names(pairs) <- seqlevels(sites_grl)
+  
   tend <- Sys.time()
 
   print(tend - tstart)
@@ -181,49 +123,15 @@ if (file.exists("dating_LD_pairs_regular.rds")) {
 ### Compute covariance in a given individual
 
 ```{r}
-tracts_gr$sample_age %>% unique
-tracts_gr$name %>% unique
-```
-
-```{r}
-compute_covariances <- function(tracts_gr, sites_grl, pairs) {
-  lapply(seqlevels(sites_grl), function(chrom) {
-
-    sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
-
-    parallel::mclapply(unique(tracts_gr$name), function(name) {
-      
-      ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom)
-      ind_sites_gr <- sites_gr
-      
-      # mark sites falling within an introgressed tract
-      tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
-      mcols(ind_sites_gr)$neand <- FALSE
-      mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
-      mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
-    
-      covariances <- sapply(seq_along(distances), function(i) {
-        sites1 <- ind_sites_gr[pairs[[chrom]][[i]]$pair1]$neand
-        sites2 <- ind_sites_gr[pairs[[chrom]][[i]]$pair2]$neand
-        cov(sites1, sites2)
-      })
-
-      tibble(
-        chrom = chrom,
-        name = name,
-        sample_age = unique(ind_tracts_gr$sample_age),
-        distance = distances,
-        covariance = covariances
-      )
-    }, mc.cores = detectCores()) %>% do.call(rbind, .)
-  }) %>% do.call(rbind, .)
-}
-```
-
-```{r}
 length_cutoff <- 50e3
 
 cov_df <- compute_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
+
+saveRDS(cov_df, "dating_LD_regular_cov.rds")
+```
+
+```{r}
+cov_reg_df <- readRDS("dating_LD_regular_cov.rds")
 ```
 
 ```{r}
@@ -231,7 +139,7 @@ cov_df <- compute_covariances(filter(tracts_gr, length > length_cutoff), sites_g
 ```
 
 ```{r}
-cov_df %>%
+cov_reg_df %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
   facet_grid(~ sample_age) +
@@ -248,7 +156,6 @@ ggplot() +
   facet_grid(. ~ sample_age) +
   coord_cartesian(xlim = c(0, max(distances)))
 ```
-
 
 ```{r}
 chrom <- "chr1_2"
@@ -276,7 +183,7 @@ ggplot() +
 
 
 
-## Fitting exponential distribution to covariances
+### Fitting exponential distribution to covariances
 
 <!-- ```{r} -->
 <!-- sample_age <- 40000 -->
@@ -319,6 +226,8 @@ fit_df <- lapply(1:nrow(grid_df), function(i) {
     covariance = predict(nls_res, newdata = data_df[, "distance"])
   )
 
+  r <- 1e-8
+
   tibble(
     name = name,
     chrom = chrom,
@@ -349,11 +258,13 @@ ggplot() +
 
 ```{r}
 fit_df %>%
-ggplot(aes(sample_age, t_admix, group = sample_age)) +
+ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
   geom_boxplot() +
   geom_point() +
   geom_hline(yintercept = t_admix, linetype = "dashed") +
-  coord_cartesian(ylim = c(0, 100e3))
+  coord_cartesian(ylim = c(0, 100e3)) +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
 ```
 
 
@@ -414,30 +325,36 @@ fixed_nea <- rowMeans(nea_gt) == 1
 fixed_sites <- fixed_afr & fixed_nea
 
 info_gt <- gt[fixed_sites, ]
+info_sites <- info_gt %>% mutate(index = 1:sum(fixed_sites)) %>% select(pos, index)
 ```
 
 ```{r}
 sites_grl <- GRangesList(list(
-  makeGRangesFromDataFrame(mutate(info_gt, chrom = "chr1_1"), start.field = "pos", end.field = "pos"),
-  makeGRangesFromDataFrame(mutate(info_gt, chrom = "chr1_2"), start.field = "pos", end.field = "pos")
+  makeGRangesFromDataFrame(mutate(info_sites, chrom = "chr1_1"), start.field = "pos", end.field = "pos", keep.extra.columns = TRUE),
+  makeGRangesFromDataFrame(mutate(info_sites, chrom = "chr1_2"), start.field = "pos", end.field = "pos", keep.extra.columns = TRUE)
 ))
 seqlevels(sites_grl) <- seqlevels(tracts_gr)
 seqlengths(sites_grl) <- seqlengths(tracts_gr)
+```
 
+```{r}
 interval <- 10e3
-
 distances <- seq(interval, 1e6, by = interval)
 
-# unlink("dating_LD_pairs_regular.rds")
-if (file.exists("dating_LD_pairs_mutated.rds")) {
-  pairs <- readRDS("dating_LD_pairs_mutated.rds")
+# unlink("dating_LD_pairs_mutations.rds")
+if (file.exists("dating_LD_pairs_mutations.rds")) {
+  pairs <- readRDS("dating_LD_pairs_mutations.rds")
 } else {
   tstart <- Sys.time()
-  pairs <- collect_pairs(sites_grl, distances)
+
+  pairs <- collect_pairs(sites_grl[1], distances)
+  pairs <- lapply(seqlevels(sites_grl), function(chr) pairs[[1]])
+  names(pairs) <- seqlevels(sites_grl)
+  
   tend <- Sys.time()
 
   print(tend - tstart)
-  saveRDS(pairs, "dating_LD_pairs_mutated.rds")
+  saveRDS(pairs, "dating_LD_pairs_mutations.rds")
 }
 ```
 
@@ -445,6 +362,55 @@ if (file.exists("dating_LD_pairs_mutated.rds")) {
 length_cutoff <- 50e3
 
 cov_df <- compute_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
+
+saveRDS(cov_df, "dating_LD_mutations_cov.rds")
+```
+
+```{r}
+cov_mut_df <- readRDS("dating_LD_mutations_cov.rds")
+```
+
+```{r}
+cov_mut_df %>%
+ggplot() +
+  geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
+  facet_grid(~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances))) +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+tracts_gr %>%
+filter(length > length_cutoff) %>%
+as_tibble %>%
+ggplot() +
+  geom_density(aes(length, color = factor(sample_age), group = name)) +
+  facet_grid(. ~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances)))
+```
+
+```{r}
+chrom <- "chr1_2"
+name <- "EUR_10"
+
+sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
+ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom)
+ind_sites_gr <- sites_gr
+
+# mark sites falling within an introgressed tract
+tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
+mcols(ind_sites_gr)$neand <- FALSE
+mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
+mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
+    
+ggplot() +
+  geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
+  geom_point(data = as.data.frame(filter(ind_sites_gr, neand == 1)), aes(x = start, y = 0.05), size = 0.1, color = "black") +
+  geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
+  scale_x_continuous(labels = scales::comma) +
+  expand_limits(x = 0) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank())
 ```
 
 
