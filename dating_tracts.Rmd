@@ -17,7 +17,7 @@ knitr::opts_chunk$set(
 set.seed(42)
 
 unlink("dating_tracts_files", recursive = TRUE)
-unlink(list.files(".", "dating_tracts.*.pdf"), recursive = TRUE)
+unlink(list.files(".", "dating_tracts.*.pdf", "dating.trees"), recursive = TRUE)
 ```
 
 ```{r}
@@ -49,18 +49,26 @@ gf <- gene_flow(from = nea, to = eur, rate = 0.03, start = t_admix, end = t_admi
 
 model <- compile_model(
   populations = list(anc, afr, nea, eur), gene_flow = gf,
-  generation_time = gen_time
+  generation_time = gen_time,
+  path = "dating_model", overwrite = TRUE, force = TRUE
 )
 
-samples <- schedule_sampling(model, times = c(50, 40, 30, 20, 10, 0) * 1e3, list(eur, 10))
+samples <- rbind(
+  schedule_sampling(model, times = 50e3, list(nea, 2)),
+  schedule_sampling(model, times = c(50, 40, 30, 20, 10, 0) * 1e3, list(eur, 10)),
+  schedule_sampling(model, times = 0, list(afr, 100))
+)
 
 plot_model(model, proportions = TRUE, order = c("AFR", "EUR", "ancestor", "NEA"))
 ```
 
 ```{r, eval=!file.exists("data/sim_tracts.tsv")}
-ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples = samples, random_seed = 42)
+ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples = samples, random_seed = 42) %>%
+  ts_mutate(1e-8, random_seed = 42)
 
 tracts <- ts_tracts(ts, census = t_admix, quiet = TRUE)
+
+ts_save(ts, "dating.trees")
 ```
 
 ```{r, eval=!file.exists("data/sim_tracts.tsv")}
