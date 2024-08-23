@@ -1,5 +1,7 @@
 #!/bin/env bash
 
+set -e
+
 for chrom in $(seq 1 22); do
 
   echo "Processing chromosome $chrom..."
@@ -29,3 +31,8 @@ for chrom in $(seq 1 22); do
   rm $gt
 
 done
+
+zcat info_*.tsv.gz | bgzip > data/info_gt.tsv.gz
+tabix -s1 -b2 -e2 data/info_gt.tsv.gz
+
+rm info_*.tsv.gz
