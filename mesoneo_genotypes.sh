@@ -16,12 +16,8 @@ bcftools view -m2 -M2 -v snps $vcf \
     | bcftools query -f "%CHROM\t%POS\t%REF\t%ALT[\t%GT]\n" \
     | sed 's#\.|\.#-#g' \
     | sed 's#\./\.#-#g' \
-    >> ${gt}
+    >> $gt
 
-# compress and index the table
-bgzip $gt
-tabix -s1 -b2 -e2 ${gt}.gz
+Rscript ancestry_sites.R $gt
 
-Rscript ancestry_sites.R ${gt}.gz
-
-rm ${gt}.gz
+rm $gt
