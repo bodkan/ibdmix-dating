@@ -1,8 +1,8 @@
 #!/bin/env bash
 
-vcf="/maps/projects/racimolab/data/mesoneo/20200629-impute.1000g.sg_freeze_v1/vcf/20200629-impute.1000g.sg_freeze_v1/21.neo.impute.1000g.vcf.gz"
-
 chrom="21"
+
+vcf="/maps/projects/racimolab/data/mesoneo/20200629-impute.1000g.sg_freeze_v1/vcf/20200629-impute.1000g.sg_freeze_v1/${chrom}.neo.impute.1000g.vcf.gz"
 
 gt="gt_chr${chrom}.tsv"
 
