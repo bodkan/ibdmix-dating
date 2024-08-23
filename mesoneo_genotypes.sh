@@ -32,7 +32,7 @@ for chrom in $(seq 1 22); do
 
 done
 
-zcat info_*.tsv.gz | bgzip > data/info_gt.tsv.gz
+zcat info_gt_chr{1..22}.tsv.gz | bgzip > data/info_gt.tsv.gz
 tabix -s1 -b2 -e2 data/info_gt.tsv.gz
 
 rm info_*.tsv.gz
