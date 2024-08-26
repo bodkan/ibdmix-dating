@@ -285,7 +285,7 @@ collect_pairs <- function(sites_grl, distances, ncores = parallel::detectCores()
 }
 
 # Compute covariances of allele states at pairs of sites
-compute_covariances <- function(tracts_gr, sites_grl, pairs) {
+compute_tract_covariances <- function(tracts_gr, sites_grl, pairs) {
   lapply(seqlevels(sites_grl), function(chrom) {
 
     sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist

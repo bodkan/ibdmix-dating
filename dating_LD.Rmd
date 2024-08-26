@@ -125,13 +125,7 @@ if (file.exists("dating_LD_pairs_regular.rds")) {
 ```{r}
 length_cutoff <- 50e3
 
-cov_df <- compute_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
-
-saveRDS(cov_df, "dating_LD_regular_cov.rds")
-```
-
-```{r}
-cov_reg_df <- readRDS("dating_LD_regular_cov.rds")
+cov_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
 ```
 
 ```{r}
@@ -361,13 +355,7 @@ if (file.exists("dating_LD_pairs_mutations.rds")) {
 ```{r}
 length_cutoff <- 50e3
 
-cov_df <- compute_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
-
-saveRDS(cov_df, "dating_LD_mutations_cov.rds")
-```
-
-```{r}
-cov_mut_df <- readRDS("dating_LD_mutations_cov.rds")
+cov_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
 ```
 
 ```{r}
