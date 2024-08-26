@@ -321,7 +321,7 @@ compute_tract_covariances <- function(tracts_gr, sites_grl, pairs) {
 
 # Compute covariances of allele states at pairs of sites
 compute_match_covariances <- function(info_gt, pairs, metadata) {
-  archaic_name <- "NEA_1_hap1"
+  archaic_name <- "NEA_1"
 
   lapply(unique(info_gt$chrom), function(chrom) {
 
@@ -340,7 +340,7 @@ compute_match_covariances <- function(info_gt, pairs, metadata) {
       tibble(
         chrom = chrom,
         name = name,
-        sample_age = filter(metadata, name == gsub("_hap\\d$", "", !!name))$sample_age,
+        sample_age = filter(metadata, name == !!name)$sample_age,
         distance = distances,
         covariance = covariances
       )
@@ -356,12 +356,19 @@ fit_exponential <- function(cov_df) {
     chrom <- grid_df[i, ]$chrom
 
     data_df <- filter(cov_df, name == !!name, chrom == !!chrom)
-    nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df)
-
-    df <- tibble(
-      distance = data_df$distance,
-      covariance = predict(nls_res, newdata = data_df[, "distance"])
+    lambda <- tryCatch({
+      nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df)
+      exp(coef(nls_res)["lrc"])
+    }, error = function(e) NA
     )
+
+    if (!is.na(lambda)) {
+      df <- tibble(
+        distance = data_df$distance,
+        covariance = predict(nls_res, newdata = data_df[, "distance"])
+      )
+    } else
+      df <- NULL
 
     r <- 1e-8
 
@@ -369,7 +376,7 @@ fit_exponential <- function(cov_df) {
       name = name,
       chrom = chrom,
       sample_age = data_df$sample_age[1],
-      lambda = exp(coef(nls_res)["lrc"]),
+      lambda = lambda,
       t_gens_before = lambda / r,
       t_admix = t_gens_before * gen_time + sample_age,
       fit = list(df)

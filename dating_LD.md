@@ -168,16 +168,6 @@ tracts_df
 #> # ℹ 4,270 more rows
 ```
 
-<!-- ```{r} -->
-<!-- metadata <- read_metadata() -->
-<!-- tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient")) -->
-<!-- tracts_df <- select(metadata, name = sampleId, ageAverage, coverage) %>% -->
-<!--   inner_join(tracts_df, by = c("name" = "ID")) %>% -->
-<!--   dplyr::rename(left = start, right = end) -->
-<!-- tracts_df <- tracts_df %>% filter(name == "Kostenki") %>% arrange(chrom, left, right) -->
-<!-- tracts_df$chrom_id <- tracts_df$chrom -->
-<!-- ``` -->
-
 ``` r
 tracts_gr <- tracts_df %>%
   makeGRangesFromDataFrame(
@@ -188,11 +178,6 @@ tracts_gr <- tracts_df %>%
     starts.in.df.are.0based = TRUE
   )
 ```
-
-<!-- ```{r} -->
-<!-- seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))] -->
-<!-- genome(tracts_gr) <- "hg19" -->
-<!-- ``` -->
 
 ``` r
 seqlengths(tracts_gr) <- rep(100e6, 2)
@@ -258,17 +243,13 @@ if (file.exists(file)) {
 }
 ```
 
-### Compute covariance in a given individual
+### Compute covariance in all individuals
 
 ``` r
-length_cutoff <- 50e3
+length_cutoff <- 0
 
 cov_reg_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
 ```
-
-<!-- ```{r} -->
-<!-- cov_df <- cov_ind_df %>%  group_by(sample_age, distance) %>% summarise(covariance = mean(covariance)) -->
-<!-- ``` -->
 
 ``` r
 cov_reg_df %>%
@@ -341,34 +322,7 @@ ggplot() +
 <!-- ``` -->
 
 ``` r
-grid_df <- expand_grid(chrom = seqlevels(tracts_gr), name = unique(tracts_gr$name))
-
-fit_df <- lapply(1:nrow(grid_df), function(i) {
-  name <- grid_df[i, ]$name
-  chrom <- grid_df[i, ]$chrom
-
-  data_df <- filter(cov_reg_df, name == !!name, chrom == !!chrom)
-  nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df)
-
-  df <- tibble(
-    distance = data_df$distance,
-    covariance = predict(nls_res, newdata = data_df[, "distance"])
-  )
-
-  r <- 1e-8
-
-  tibble(
-    name = name,
-    chrom = chrom,
-    sample_age = data_df$sample_age[1],
-    lambda = exp(coef(nls_res)["lrc"]),
-    t_gens_before = lambda / r,
-    t_admix = t_gens_before * gen_time + sample_age,
-    fit = list(df)
-  )
-}) %>%
-  do.call(rbind, .) %>%
-  unnest(fit)
+fit_reg_df <- fit_exponential(cov_reg_df)
 ```
 
 ``` r
@@ -376,7 +330,7 @@ sample_age <- 30000
 name <- sample(filter(cov_reg_df, sample_age == !!sample_age)$name, 1)
 
 ind_cov_df <- filter(cov_reg_df, name == !!name)
-ind_fit_df <- filter(fit_df, name == !!name)
+ind_fit_df <- filter(fit_reg_df, name == !!name)
 
 ggplot() +
   geom_line(data = ind_cov_df, aes(distance, covariance)) +
@@ -387,7 +341,7 @@ ggplot() +
 ![](dating_LD_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
 ``` r
-fit_df %>%
+fit_reg_df %>%
 ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
   geom_boxplot() +
   geom_point() +
@@ -399,85 +353,9 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 
 ![](dating_LD_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
-<!-- ## Dating admixture using genotype data -->
-<!-- ```{r} -->
-<!-- model <- read_model("dating_model") -->
-<!-- ts <- ts_load("dating.trees", model = model) -->
-<!-- gt <- ts_genotypes(ts) -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- afr_gt <- select(gt, starts_with("AFR")) -->
-<!-- nea_gt <- select(gt, starts_with("NEA")) -->
-<!-- fixed_afr <- rowMeans(afr_gt) == 0 -->
-<!-- fixed_nea <- rowMeans(nea_gt) == 1 -->
-<!-- fixed_sites <- fixed_afr & fixed_nea -->
-<!-- info_gt <- gt[fixed_sites, ] -->
-<!-- info_ir <- IRanges(start = info_gt$pos, end = info_gt$pos, index = 1:sum(fixed_sites)) -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- sites_grl <- GRangesList(list(GRanges(seqnames = "chr1_1", info_ir), GRanges(seqnames = "chr1_2", info_ir))) -->
-<!-- seqlevels(sites_grl) <- seqlevels(tracts_gr) -->
-<!-- seqlengths(sites_grl) <- seqlengths(tracts_gr) -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- interval <- 10e3 -->
-<!-- distances <- seq(interval, 1e6, by = interval) -->
-<!-- # unlink("dating_LD_pairs_mutations.rds") -->
-<!-- if (file.exists("dating_LD_pairs_mutations.rds")) { -->
-<!--   pairs <- readRDS("dating_LD_pairs_mutations.rds") -->
-<!-- } else { -->
-<!--   tstart <- Sys.time() -->
-<!--   pairs <- collect_pairs(sites_grl[1], distances) -->
-<!--   pairs <- lapply(seqlevels(sites_grl), function(chr) pairs[[1]]) -->
-<!--   names(pairs) <- seqlevels(sites_grl) -->
-<!--   tend <- Sys.time() -->
-<!--   print(tend - tstart) -->
-<!--   saveRDS(pairs, "dating_LD_pairs_mutations.rds") -->
-<!-- } -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- length_cutoff <- 50e3 -->
-<!-- cov_mut_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs) -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- cov_mut_df %>% -->
-<!-- ggplot() + -->
-<!--   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) + -->
-<!--   facet_grid(~ sample_age) + -->
-<!--   coord_cartesian(xlim = c(0, max(distances))) + -->
-<!--   theme(legend.position = "bottom") -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- tracts_gr %>% -->
-<!-- filter(length > length_cutoff) %>% -->
-<!-- as_tibble %>% -->
-<!-- ggplot() + -->
-<!--   geom_density(aes(length, color = factor(sample_age), group = name)) + -->
-<!--   facet_grid(. ~ sample_age) + -->
-<!--   coord_cartesian(xlim = c(0, max(distances))) -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- chrom <- "chr1_2" -->
-<!-- name <- "EUR_10" -->
-<!-- sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist -->
-<!-- ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom) -->
-<!-- ind_sites_gr <- sites_gr -->
-<!-- # mark sites falling within an introgressed tract -->
-<!-- tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr)) -->
-<!-- mcols(ind_sites_gr)$neand <- FALSE -->
-<!-- mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE -->
-<!-- mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand) -->
-<!-- ggplot() + -->
-<!--   geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") + -->
-<!--   geom_point(data = as.data.frame(filter(ind_sites_gr, neand == 1)), aes(x = start, y = 0.05), size = 0.1, color = "black") + -->
-<!--   geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) + -->
-<!--   scale_x_continuous(labels = scales::comma) + -->
-<!--   expand_limits(x = 0) + -->
-<!--   theme_minimal() + -->
-<!--   theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank()) -->
-<!-- ``` -->
+## Admixture dating using genotype data (tracts)
 
-## Dating admixture using genotype data (tracts)
+### Define archaic ancestry-informative sites
 
 ``` r
 model <- read_model("dating_model")
@@ -493,10 +371,9 @@ fixed_afr <- gt[, rowMeans(.SD) == 0, .SDcols = patterns("^AFR")]
 fixed_neand <- gt[, rowMeans(.SD) == 1, .SDcols = patterns("^NEA")]
 fixed_sites <- fixed_afr & fixed_neand
 
-pos <- gt[fixed_sites, pos]
-info_gt <- gt[fixed_sites]
-info_gt[, pos := NULL]
-sites_ir <- IRanges(start = pos, end = pos, index = 1:sum(fixed_sites))
+gt <- gt[fixed_sites]
+gt <- gt[, .SD, .SDcols = !patterns("^AFR")]
+sites_ir <- IRanges(start = gt$pos, end = gt$pos, index = 1:sum(fixed_sites))
 ```
 
 ``` r
@@ -527,7 +404,7 @@ if (file.exists(file)) {
 ```
 
 ``` r
-length_cutoff <- 50e3
+length_cutoff <- 0
 
 cov_mut_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
 ```
@@ -543,45 +420,43 @@ ggplot() +
 
 ![](dating_LD_files/figure-gfm/unnamed-chunk-20-1.png)<!-- -->
 
+### Fitting exponential distribution to covariances
+
 ``` r
-tracts_gr %>%
-filter(length > length_cutoff) %>%
-as_tibble %>%
-ggplot() +
-  geom_density(aes(length, color = factor(sample_age), group = name)) +
-  facet_grid(. ~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances)))
+fit_mut_df <- fit_exponential(cov_mut_df)
 ```
 
-![](dating_LD_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
-
 ``` r
-chrom <- "chr1"
-name <- "EUR_10"
+sample_age <- 30000
+name <- sample(filter(fit_mut_df, sample_age == !!sample_age)$name, 1)
 
-sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
-ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom)
-ind_sites_gr <- sites_gr
+ind_cov_df <- filter(cov_mut_df, name == !!name)
+ind_fit_df <- filter(fit_mut_df, name == !!name)
 
-# mark sites falling within an introgressed tract
-tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
-mcols(ind_sites_gr)$neand <- FALSE
-mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
-mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
-    
 ggplot() +
-  geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
-  geom_point(data = as.data.frame(filter(ind_sites_gr, neand == 1)), aes(x = start, y = 0.05), size = 0.1, color = "black") +
-  geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
-  scale_x_continuous(labels = scales::comma) +
-  expand_limits(x = 0) +
-  theme_minimal() +
-  theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank())
+  geom_line(data = ind_cov_df, aes(distance, covariance)) +
+  geom_line(data = ind_fit_df, aes(distance, covariance), color = "red", linetype = "dashed") +
+  facet_wrap(~ chrom)
 ```
 
 ![](dating_LD_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
 
+``` r
+fit_mut_df %>%
+ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
+  geom_boxplot() +
+  geom_point() +
+  geom_hline(yintercept = t_admix, linetype = "dashed") +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+```
+
+![](dating_LD_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+
 ## Dating admixture using genotype data (info sites)
+
+### Define archaic ancestry-informative sites
 
 ``` r
 model <- read_model("dating_model")
@@ -598,7 +473,7 @@ fixed_afr <- gt[, rowMeans(.SD) == 0, .SDcols = patterns("^AFR")]
 fixed_neand <- gt[, rowMeans(.SD) == 1, .SDcols = patterns("^NEA")]
 fixed_sites <- fixed_afr & fixed_neand
 
-gt <- gt[fixed_sites]
+gt <- gt[fixed_sites, .SD, .SDcols = !patterns("^AFR")]
 sites_ir <- IRanges(start = gt$pos, end = gt$pos, index = 1:sum(fixed_sites))
 ```
 
@@ -630,11 +505,18 @@ if (file.exists(file)) {
 ```
 
 ``` r
-length_cutoff <- 50e3
-
 info_gt <- lapply(seqlevels(sites_grl), function(chrom) {
+  hap <- gsub("chr", "", chrom)
+
   new_gt <- copy(gt)
   new_gt[, chrom := chrom]
+
+  ind_names <- grep(paste0("_hap", hap, "$"), names(gt), value = TRUE)
+  cols <- c("chrom", "pos", ind_names)
+  new_gt <- new_gt[, .SD, .SDcols = cols]
+
+  names(new_gt) <- gsub("_hap\\d", "", names(new_gt))
+
   new_gt
 }) %>%
   do.call(rbind, .)
@@ -651,42 +533,101 @@ ggplot() +
   theme(legend.position = "bottom")
 ```
 
-![](dating_LD_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
-
-``` r
-tracts_gr %>%
-filter(length > length_cutoff) %>%
-as_tibble %>%
-ggplot() +
-  geom_density(aes(length, color = factor(sample_age), group = name)) +
-  facet_grid(. ~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances)))
-```
-
 ![](dating_LD_files/figure-gfm/unnamed-chunk-29-1.png)<!-- -->
 
+### Fitting exponential distribution to covariances
+
 ``` r
-chrom <- "chr1"
-name <- "EUR_10"
-
-sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
-ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom)
-ind_sites_gr <- sites_gr
-
-# mark sites falling within an introgressed tract
-tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
-mcols(ind_sites_gr)$neand <- FALSE
-mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
-mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
-    
-ggplot() +
-  geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
-  geom_point(data = as.data.frame(filter(ind_sites_gr, neand == 1)), aes(x = start, y = 0.05), size = 0.1, color = "black") +
-  geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
-  scale_x_continuous(labels = scales::comma) +
-  expand_limits(x = 0) +
-  theme_minimal() +
-  theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank())
+fit_info_df <- fit_exponential(cov_info_df)
 ```
 
-![](dating_LD_files/figure-gfm/unnamed-chunk-30-1.png)<!-- -->
+``` r
+sample_age <- 10000
+name <- sample(filter(fit_mut_df, sample_age == !!sample_age)$name, 1)
+
+ind_cov_df <- filter(cov_info_df, name == !!name)
+ind_fit_df <- filter(fit_info_df, name == !!name)
+
+ggplot() +
+  geom_line(data = ind_cov_df, aes(distance, covariance)) +
+  geom_line(data = ind_fit_df, aes(distance, covariance), color = "red", linetype = "dashed") +
+  facet_wrap(~ chrom)
+```
+
+![](dating_LD_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+``` r
+fit_info_df %>%
+ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
+  geom_boxplot() +
+  geom_point() +
+  geom_hline(yintercept = t_admix, linetype = "dashed") +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+```
+
+![](dating_LD_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
+
+## Comparison of exponential fits
+
+``` r
+cov_df <- rbind(
+  mutate(cov_reg_df, method = "pairwise regular tracts"),
+  mutate(cov_mut_df, method = "pairwise info tracts"),
+  mutate(cov_info_df, method = "pairwise info")
+)
+```
+
+``` r
+cov_df %>%
+group_by(method, sample_age, distance) %>%
+summarise(covariance = mean(covariance)) %>%
+ggplot() +
+  geom_line(aes(distance, covariance, color = factor(method))) +
+  facet_grid(~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances))) +
+  theme(legend.position = "bottom")
+#> `summarise()` has grouped output by 'method', 'sample_age'. You can override
+#> using the `.groups` argument.
+```
+
+![](dating_LD_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
+
+``` r
+fit_df <- rbind(
+  mutate(fit_reg_df, method = "pairwise regular tracts"),
+  mutate(fit_mut_df, method = "pairwise info tracts"),
+  mutate(fit_info_df, method = "pairwise info")
+)
+```
+
+``` r
+fit_df %>%
+ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
+  geom_boxplot(aes(fill = factor(sample_age))) +
+  geom_point() +
+  geom_hline(yintercept = t_admix, linetype = "dashed") +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank()) +
+  facet_wrap(~ method)
+```
+
+![](dating_LD_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
+
+## Empirical data
+
+<!-- ```{r} -->
+<!-- metadata <- read_metadata() -->
+<!-- tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient")) -->
+<!-- tracts_df <- select(metadata, name = sampleId, ageAverage, coverage) %>% -->
+<!--   inner_join(tracts_df, by = c("name" = "ID")) %>% -->
+<!--   dplyr::rename(left = start, right = end) -->
+<!-- tracts_df <- tracts_df %>% filter(name == "Kostenki") %>% arrange(chrom, left, right) -->
+<!-- tracts_df$chrom_id <- tracts_df$chrom -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))] -->
+<!-- genome(tracts_gr) <- "hg19" -->
+<!-- ``` -->
