@@ -347,3 +347,34 @@ compute_match_covariances <- function(info_gt, pairs, metadata) {
     }, mc.cores = detectCores()) %>% do.call(rbind, .)
   }) %>% do.call(rbind, .)
 }
+
+fit_exponential <- function(cov_df) {
+  grid_df <- expand_grid(chrom = unique(cov_df$chrom), name = unique(cov_df$name))
+
+  fit_df <- lapply(1:nrow(grid_df), function(i) {
+    name <- grid_df[i, ]$name
+    chrom <- grid_df[i, ]$chrom
+
+    data_df <- filter(cov_df, name == !!name, chrom == !!chrom)
+    nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df)
+
+    df <- tibble(
+      distance = data_df$distance,
+      covariance = predict(nls_res, newdata = data_df[, "distance"])
+    )
+
+    r <- 1e-8
+
+    tibble(
+      name = name,
+      chrom = chrom,
+      sample_age = data_df$sample_age[1],
+      lambda = exp(coef(nls_res)["lrc"]),
+      t_gens_before = lambda / r,
+      t_admix = t_gens_before * gen_time + sample_age,
+      fit = list(df)
+    )
+  }) %>%
+    do.call(rbind, .) %>%
+    unnest(fit)
+}
