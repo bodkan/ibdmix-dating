@@ -104,8 +104,9 @@ interval <- 10e3
 sites_grl <- generate_info_sites(tracts_gr, interval = interval)
 distances <- seq(interval, 1e6, by = interval)
 
-if (file.exists("dating_LD_pairs_regular.rds")) {
-  pairs <- readRDS("dating_LD_pairs_regular.rds")
+file <- "dating_LD_pairs_tracts_regular.rds"
+if (file.exists(file)) {
+  pairs <- readRDS(file)
 } else {
   tstart <- Sys.time()
 
@@ -116,7 +117,7 @@ if (file.exists("dating_LD_pairs_regular.rds")) {
   tend <- Sys.time()
 
   print(tend - tstart)
-  saveRDS(pairs, "dating_LD_pairs_regular.rds")
+  saveRDS(pairs, file)
 }
 ```
 
@@ -363,7 +364,7 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 
 
 
-## Dating admixture using genotype data
+## Dating admixture using genotype data (tracts)
 
 ```{r}
 model <- read_model("dating_model")
@@ -394,9 +395,9 @@ seqlengths(sites_grl) <- seqlengths(tracts_gr)
 interval <- 10e3
 distances <- seq(interval, 1e6, by = interval)
 
-# unlink("dating_LD_pairs_mutations.rds")
-if (file.exists("dating_LD_pairs_mutations.rds")) {
-  pairs <- readRDS("dating_LD_pairs_mutations.rds")
+file <- "dating_LD_pairs_tracts_mutations.rds"
+if (file.exists(file)) {
+  pairs <- readRDS(file)
 } else {
   tstart <- Sys.time()
 
@@ -407,7 +408,7 @@ if (file.exists("dating_LD_pairs_mutations.rds")) {
   tend <- Sys.time()
 
   print(tend - tstart)
-  saveRDS(pairs, "dating_LD_pairs_mutations.rds")
+  saveRDS(pairs, file)
 }
 ```
 
@@ -461,3 +462,106 @@ ggplot() +
 ```
 
 
+
+## Dating admixture using genotype data (info sites)
+
+```{r}
+model <- read_model("dating_model")
+ts <- ts_load("dating.trees", model = model)
+metadata <- ts_samples(ts) %>% dplyr::rename(sample_age = time)
+
+gt <- ts_genotypes(ts) %>% setDT()
+names(gt) <- gsub("_chr", "_hap", names(gt))
+```
+
+```{r}
+fixed_afr <- gt[, rowMeans(.SD) == 0, .SDcols = patterns("^AFR")]
+fixed_neand <- gt[, rowMeans(.SD) == 1, .SDcols = patterns("^NEA")]
+fixed_sites <- fixed_afr & fixed_neand
+
+gt <- gt[fixed_sites]
+sites_ir <- IRanges(start = gt$pos, end = gt$pos, index = 1:sum(fixed_sites))
+```
+
+```{r}
+sites_grl <- GRangesList(list(GRanges(seqnames = "chr1", sites_ir), GRanges(seqnames = "chr2", sites_ir)))
+seqlevels(sites_grl) <- seqlevels(tracts_gr)
+seqlengths(sites_grl) <- seqlengths(tracts_gr)
+```
+
+```{r}
+interval <- 10e3
+distances <- seq(interval, 1e6, by = interval)
+
+file <- "dating_LD_pairs_info_mutations.rds"
+if (file.exists(file)) {
+  pairs <- readRDS(file)
+} else {
+  tstart <- Sys.time()
+
+  pairs <- collect_pairs(sites_grl[1], distances)
+  pairs <- lapply(seqlevels(sites_grl), function(chr) pairs[[1]])
+  names(pairs) <- seqlevels(sites_grl)
+  
+  tend <- Sys.time()
+
+  print(tend - tstart)
+  saveRDS(pairs, file)
+}
+```
+
+```{r}
+length_cutoff <- 50e3
+
+info_gt <- lapply(seqlevels(sites_grl), function(chrom) {
+  new_gt <- copy(gt)
+  new_gt[, chrom := chrom]
+  new_gt
+}) %>%
+  do.call(rbind, .)
+
+cov_info_df <- compute_match_covariances(info_gt, pairs, metadata)
+```
+
+```{r}
+cov_info_df %>%
+ggplot() +
+  geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
+  facet_grid(~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances))) +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+tracts_gr %>%
+filter(length > length_cutoff) %>%
+as_tibble %>%
+ggplot() +
+  geom_density(aes(length, color = factor(sample_age), group = name)) +
+  facet_grid(. ~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances)))
+```
+
+```{r}
+chrom <- "chr1"
+name <- "EUR_10"
+
+sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
+ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom)
+ind_sites_gr <- sites_gr
+
+# mark sites falling within an introgressed tract
+tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
+mcols(ind_sites_gr)$neand <- FALSE
+mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
+mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
+    
+ggplot() +
+  geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
+  geom_point(data = as.data.frame(filter(ind_sites_gr, neand == 1)), aes(x = start, y = 0.05), size = 0.1, color = "black") +
+  geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
+  scale_x_continuous(labels = scales::comma) +
+  expand_limits(x = 0) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank())
+```

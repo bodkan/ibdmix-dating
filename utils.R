@@ -288,12 +288,12 @@ collect_pairs <- function(sites_grl, distances, ncores = parallel::detectCores()
 compute_tract_covariances <- function(tracts_gr, sites_grl, pairs) {
   lapply(seqlevels(sites_grl), function(chrom) {
 
-    sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
+    chrom_sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
 
     parallel::mclapply(unique(tracts_gr$name), function(name) {
 
       ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom)
-      ind_sites_gr <- sites_gr
+      ind_sites_gr <- chrom_sites_gr
 
       # mark sites falling within an introgressed tract
       tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
@@ -311,6 +311,36 @@ compute_tract_covariances <- function(tracts_gr, sites_grl, pairs) {
         chrom = chrom,
         name = name,
         sample_age = unique(ind_tracts_gr$sample_age),
+        distance = distances,
+        covariance = covariances
+      )
+    }, mc.cores = detectCores()) %>% do.call(rbind, .)
+  }) %>% do.call(rbind, .)
+}
+
+
+# Compute covariances of allele states at pairs of sites
+compute_match_covariances <- function(info_gt, pairs, metadata) {
+  archaic_name <- "NEA_1_hap1"
+
+  lapply(unique(info_gt$chrom), function(chrom) {
+
+    chrom_info_gt <- info_gt[, .SD[chrom %in% ..chrom, ], .SDcols = !c("chrom", "pos")]
+
+    parallel::mclapply(colnames(chrom_info_gt), function(name) {
+
+      ind_matches <- chrom_info_gt[, .(match = .SD[, get(name) == .SD[, get(archaic_name)]])]
+
+      covariances <- sapply(seq_along(distances), function(i) {
+        sites1 <- ind_matches[pairs[[chrom]][[i]]$pair1]$match
+        sites2 <- ind_matches[pairs[[chrom]][[i]]$pair2]$match
+        cov(sites1, sites2)
+      })
+
+      tibble(
+        chrom = chrom,
+        name = name,
+        sample_age = filter(metadata, name == gsub("_hap\\d$", "", !!name))$sample_age,
         distance = distances,
         covariance = covariances
       )
