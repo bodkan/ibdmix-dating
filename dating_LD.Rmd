@@ -139,7 +139,7 @@ cov_reg_df %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
   facet_grid(~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances))) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
   theme(legend.position = "bottom")
 ```
 
@@ -423,7 +423,7 @@ cov_mut_df %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
   facet_grid(~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances))) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
   theme(legend.position = "bottom")
 ```
 
@@ -528,7 +528,7 @@ cov_info_df %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
   facet_grid(~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances))) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
   theme(legend.position = "bottom")
 ```
 

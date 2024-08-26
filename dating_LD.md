@@ -256,7 +256,6 @@ if (file.exists(file)) {
   print(tend - tstart)
   saveRDS(pairs, file)
 }
-#> Time difference of 4.490613 mins
 ```
 
 ### Compute covariance in a given individual
@@ -276,7 +275,7 @@ cov_reg_df %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
   facet_grid(~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances))) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
   theme(legend.position = "bottom")
 ```
 
@@ -525,7 +524,6 @@ if (file.exists(file)) {
   print(tend - tstart)
   saveRDS(pairs, file)
 }
-#> Time difference of 22.84905 mins
 ```
 
 ``` r
@@ -539,7 +537,7 @@ cov_mut_df %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
   facet_grid(~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances))) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
   theme(legend.position = "bottom")
 ```
 
@@ -629,7 +627,6 @@ if (file.exists(file)) {
   print(tend - tstart)
   saveRDS(pairs, file)
 }
-#> Time difference of 24.49311 mins
 ```
 
 ``` r
@@ -650,7 +647,7 @@ cov_info_df %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
   facet_grid(~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances))) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
   theme(legend.position = "bottom")
 ```
 
