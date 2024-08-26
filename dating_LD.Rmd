@@ -21,6 +21,7 @@ unlink(list.files(".", "dating_LD.*.pdf"), recursive = TRUE)
 ```
 
 ```{r}
+library(data.table)
 library(ggplot2)
 library(readr)
 library(dplyr)
@@ -51,7 +52,7 @@ tracts_df <-
   read_tsv("data/sim_tracts.tsv") %>%
   group_by(name) %>%
   mutate(haplotype = dense_rank(node_id),
-         chrom = paste0("chr1_", haplotype)) %>%
+         chrom = paste0("chr", haplotype)) %>%
   ungroup()
 
 tracts_df
@@ -125,12 +126,12 @@ if (file.exists("dating_LD_pairs_regular.rds")) {
 ```{r}
 length_cutoff <- 50e3
 
-cov_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
+cov_reg_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
 ```
 
-```{r}
-# cov_df <- cov_ind_df %>%  group_by(sample_age, distance) %>% summarise(covariance = mean(covariance))
-```
+<!-- ```{r} -->
+<!-- cov_df <- cov_ind_df %>%  group_by(sample_age, distance) %>% summarise(covariance = mean(covariance)) -->
+<!-- ``` -->
 
 ```{r}
 cov_reg_df %>%
@@ -152,7 +153,7 @@ ggplot() +
 ```
 
 ```{r}
-chrom <- "chr1_2"
+chrom <- "chr1"
 name <- "EUR_10"
 
 sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
@@ -212,7 +213,7 @@ fit_df <- lapply(1:nrow(grid_df), function(i) {
   name <- grid_df[i, ]$name
   chrom <- grid_df[i, ]$chrom
 
-  data_df <- filter(cov_df, name == !!name, chrom == !!chrom)
+  data_df <- filter(cov_reg_df, name == !!name, chrom == !!chrom)
   nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df)
 
   df <- tibble(
@@ -236,12 +237,11 @@ fit_df <- lapply(1:nrow(grid_df), function(i) {
   unnest(fit)
 ```
 
-
 ```{r}
-sample_age <- 0
-name <- sample(filter(cov_df, sample_age == !!sample_age)$name, 1)
+sample_age <- 30000
+name <- sample(filter(cov_reg_df, sample_age == !!sample_age)$name, 1)
 
-ind_cov_df <- filter(cov_df, name == !!name)
+ind_cov_df <- filter(cov_reg_df, name == !!name)
 ind_fit_df <- filter(fit_df, name == !!name)
 
 ggplot() +
@@ -262,43 +262,106 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 ```
 
 
+<!-- ## Dating admixture using genotype data -->
 
-
-
-<!-- ### Exponential fitting across all individuals -->
 <!-- ```{r} -->
-<!-- fit_df <- lapply(c(0, 10e3, 20e3, 30e3, 40e3, 50e3), function(sample_age) { -->
-<!--   data_df <- filter(cov_df, sample_age == !!sample_age) -->
-<!--   nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df) -->
+<!-- model <- read_model("dating_model") -->
+<!-- ts <- ts_load("dating.trees", model = model) -->
 
-<!--   df <- tibble( -->
-<!--     distance = data_df$distance, -->
-<!--     covariance = predict(nls_res, newdata = data_df[, "distance"]) -->
-<!--   ) -->
+<!-- gt <- ts_genotypes(ts) -->
+<!-- ``` -->
 
-<!--   tibble( -->
-<!--     sample_age = sample_age, -->
-<!--     lambda = exp(coef(nls_res)["lrc"]), -->
-<!--     t_gens_before = lambda / r, -->
-<!--     t_admix = t_gens_before * gen_time + sample_age, -->
-<!--     fit = list(df) -->
-<!--   ) -->
-<!-- }) %>% do.call(rbind, .) -->
+<!-- ```{r} -->
+<!-- afr_gt <- select(gt, starts_with("AFR")) -->
+<!-- nea_gt <- select(gt, starts_with("NEA")) -->
 
-<!-- fit_df -->
+<!-- fixed_afr <- rowMeans(afr_gt) == 0 -->
+<!-- fixed_nea <- rowMeans(nea_gt) == 1 -->
+
+<!-- fixed_sites <- fixed_afr & fixed_nea -->
+
+<!-- info_gt <- gt[fixed_sites, ] -->
+<!-- info_ir <- IRanges(start = info_gt$pos, end = info_gt$pos, index = 1:sum(fixed_sites)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- sites_grl <- GRangesList(list(GRanges(seqnames = "chr1_1", info_ir), GRanges(seqnames = "chr1_2", info_ir))) -->
+<!-- seqlevels(sites_grl) <- seqlevels(tracts_gr) -->
+<!-- seqlengths(sites_grl) <- seqlengths(tracts_gr) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- interval <- 10e3 -->
+<!-- distances <- seq(interval, 1e6, by = interval) -->
+
+<!-- # unlink("dating_LD_pairs_mutations.rds") -->
+<!-- if (file.exists("dating_LD_pairs_mutations.rds")) { -->
+<!--   pairs <- readRDS("dating_LD_pairs_mutations.rds") -->
+<!-- } else { -->
+<!--   tstart <- Sys.time() -->
+
+<!--   pairs <- collect_pairs(sites_grl[1], distances) -->
+<!--   pairs <- lapply(seqlevels(sites_grl), function(chr) pairs[[1]]) -->
+<!--   names(pairs) <- seqlevels(sites_grl) -->
+
+<!--   tend <- Sys.time() -->
+
+<!--   print(tend - tstart) -->
+<!--   saveRDS(pairs, "dating_LD_pairs_mutations.rds") -->
+<!-- } -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- length_cutoff <- 50e3 -->
+
+<!-- cov_mut_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- cov_mut_df %>% -->
+<!-- ggplot() + -->
+<!--   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) + -->
+<!--   facet_grid(~ sample_age) + -->
+<!--   coord_cartesian(xlim = c(0, max(distances))) + -->
+<!--   theme(legend.position = "bottom") -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- tracts_gr %>% -->
+<!-- filter(length > length_cutoff) %>% -->
+<!-- as_tibble %>% -->
+<!-- ggplot() + -->
+<!--   geom_density(aes(length, color = factor(sample_age), group = name)) + -->
+<!--   facet_grid(. ~ sample_age) + -->
+<!--   coord_cartesian(xlim = c(0, max(distances))) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- chrom <- "chr1_2" -->
+<!-- name <- "EUR_10" -->
+
+<!-- sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist -->
+<!-- ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom) -->
+<!-- ind_sites_gr <- sites_gr -->
+
+<!-- # mark sites falling within an introgressed tract -->
+<!-- tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr)) -->
+<!-- mcols(ind_sites_gr)$neand <- FALSE -->
+<!-- mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE -->
+<!-- mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand) -->
+
+<!-- ggplot() + -->
+<!--   geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") + -->
+<!--   geom_point(data = as.data.frame(filter(ind_sites_gr, neand == 1)), aes(x = start, y = 0.05), size = 0.1, color = "black") + -->
+<!--   geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) + -->
+<!--   scale_x_continuous(labels = scales::comma) + -->
+<!--   expand_limits(x = 0) + -->
+<!--   theme_minimal() + -->
+<!--   theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank()) -->
 <!-- ``` -->
 
 
-<!-- ```{r} -->
-<!-- p_fit <- ggplot() + -->
-<!--   geom_line(data = cov_df, aes(distance, covariance, color = factor(sample_age))) + -->
-<!--   geom_line(data = unnest(fit_df, fit), aes(distance, covariance, color = factor(sample_age)), linetype = "dashed") -->
 
-<!-- p_fit -->
-
-<!-- p_fit + facet_wrap(~ sample_age) + -->
-<!--   geom_line(data = unnest(fit_df, fit), aes(distance, covariance), linetype = "dashed") -->
-<!-- ``` -->
 
 ## Dating admixture using genotype data
 
@@ -306,27 +369,23 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 model <- read_model("dating_model")
 ts <- ts_load("dating.trees", model = model)
 
-gt <- ts_genotypes(ts)
+gt <- ts_genotypes(ts) %>% setDT()
+names(gt) <- gsub("_chr", "_hap", names(gt))
 ```
 
 ```{r}
-afr_gt <- select(gt, starts_with("AFR"))
-nea_gt <- select(gt, starts_with("NEA"))
+fixed_afr <- gt[, rowMeans(.SD) == 0, .SDcols = patterns("^AFR")]
+fixed_neand <- gt[, rowMeans(.SD) == 1, .SDcols = patterns("^NEA")]
+fixed_sites <- fixed_afr & fixed_neand
 
-fixed_afr <- rowMeans(afr_gt) == 0
-fixed_nea <- rowMeans(nea_gt) == 1
-
-fixed_sites <- fixed_afr & fixed_nea
-
-info_gt <- gt[fixed_sites, ]
-info_sites <- info_gt %>% mutate(index = 1:sum(fixed_sites)) %>% select(pos, index)
+pos <- gt[fixed_sites, pos]
+info_gt <- gt[fixed_sites]
+info_gt[, pos := NULL]
+sites_ir <- IRanges(start = pos, end = pos, index = 1:sum(fixed_sites))
 ```
 
 ```{r}
-sites_grl <- GRangesList(list(
-  makeGRangesFromDataFrame(mutate(info_sites, chrom = "chr1_1"), start.field = "pos", end.field = "pos", keep.extra.columns = TRUE),
-  makeGRangesFromDataFrame(mutate(info_sites, chrom = "chr1_2"), start.field = "pos", end.field = "pos", keep.extra.columns = TRUE)
-))
+sites_grl <- GRangesList(list(GRanges(seqnames = "chr1", sites_ir), GRanges(seqnames = "chr2", sites_ir)))
 seqlevels(sites_grl) <- seqlevels(tracts_gr)
 seqlengths(sites_grl) <- seqlengths(tracts_gr)
 ```
@@ -355,7 +414,7 @@ if (file.exists("dating_LD_pairs_mutations.rds")) {
 ```{r}
 length_cutoff <- 50e3
 
-cov_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
+cov_mut_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
 ```
 
 ```{r}
@@ -378,7 +437,7 @@ ggplot() +
 ```
 
 ```{r}
-chrom <- "chr1_2"
+chrom <- "chr1"
 name <- "EUR_10"
 
 sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
@@ -400,6 +459,5 @@ ggplot() +
   theme_minimal() +
   theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank())
 ```
-
 
 
