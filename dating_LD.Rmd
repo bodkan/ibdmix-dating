@@ -469,18 +469,19 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
   facet_wrap(~ method)
 ```
 
-## Empirical data
+## Empirical data (using only informative sites)
 
 
 ### Read inferred ancestry tracts
 
 ```{r}
-metadata <- read_metadata()
+metadata <- read_metadata() %>% mutate(sample_age = ageAverage, name = sampleId)
 tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient"))
 
 tracts_df <- select(metadata, name = sampleId, sample_age = ageAverage, coverage) %>%
   inner_join(tracts_df, by = c("name" = "ID")) %>%
-  dplyr::rename(left = start, right = end)
+  dplyr::rename(left = start, right = end) %>%
+  filter(chrom == "chr21")
 ```
 
 ```{r}
@@ -501,3 +502,85 @@ genome(tracts_gr) <- "hg19"
 
 ### Read genotypes at informative sites
 
+```{r}
+info_gt <- fread("info_gt_chr21.tsv.gz")
+
+gt_samples <- unique(gsub("_hap\\d$", "", colnames(info_gt)))
+meta_samples <- metadata$sampleId
+both_samples <- intersect(meta_samples, gt_samples)
+info_gt <- info_gt[, .SD, .SDcols = c("chrom", "pos", paste0(both_samples, "_hap1"), paste0(both_samples, "_hap2"), "NEA_1")]
+
+sites_gr <- makeGRangesFromDataFrame(info_gt[, .(chrom, pos)], start.field = "pos", end.field = "pos")
+mcols(sites_gr)$index <- 1:nrow(info_gt)
+```
+
+```{r}
+sites_grl <- GRangesList(list(sites_gr))
+seqlevels(sites_grl) <- seqlevels(tracts_gr)
+seqlengths(sites_grl) <- seqlengths(tracts_gr)
+```
+
+```{r}
+interval <- 10e3
+distances <- seq(interval, 1e6, by = interval)
+
+file <- "dating_LD_pairs_empirical.rds"
+if (file.exists(file)) {
+  pairs <- readRDS(file)
+} else {
+  tstart <- Sys.time()
+
+  pairs <- collect_pairs(sites_grl, distances)
+  names(pairs) <- seqlevels(sites_grl)
+  
+  tend <- Sys.time()
+
+  print(tend - tstart)
+  saveRDS(pairs, file)
+}
+```
+
+```{r}
+cov_emp_df <- compute_match_covariances(info_gt, pairs, metadata) %>%
+  mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
+```
+
+<!-- ```{r} -->
+<!-- cov_emp_df %>% -->
+<!-- ggplot() + -->
+<!--   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) + -->
+<!--   facet_grid(~ sample_age) + -->
+<!--   coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) + -->
+<!--   theme(legend.position = "bottom") -->
+<!-- ``` -->
+
+### Fitting exponential distribution to covariances
+
+```{r}
+fit_emp_df <- fit_exponential(cov_emp_df) %>%
+  mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
+```
+
+```{r}
+sample_age <- sample(fit_emp_df$sample_age, 1)
+name <- sample(filter(fit_emp_df, sample_age == !!sample_age)$name, 1) %>%
+  gsub("_hap\\d$", "", .)
+
+ind_cov_df <- filter(cov_emp_df, grepl(!!name, name)) %>% mutate(name = gsub("_hap\\d", "", name))
+ind_fit_df <- filter(fit_emp_df, grepl(!!name, name)) %>% mutate(name = gsub("_hap\\d", "", name))
+
+ggplot() +
+  geom_line(data = ind_cov_df, aes(distance, covariance)) +
+  geom_line(data = ind_fit_df, aes(distance, covariance), color = "red", linetype = "dashed") +
+  facet_wrap(hap ~ chrom)
+```
+
+```{r}
+fit_emp_df %>%
+ggplot(aes(sample_age, t_admix, color = sample_age)) +
+  geom_point() +
+  geom_hline(yintercept = t_admix, linetype = "dashed") +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+```
