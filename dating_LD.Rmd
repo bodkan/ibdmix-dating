@@ -21,6 +21,7 @@ unlink(list.files(".", "dating_LD.*.pdf"), recursive = TRUE)
 ```
 
 ```{r}
+library(data.table)
 library(ggplot2)
 library(readr)
 library(dplyr)
@@ -51,23 +52,11 @@ tracts_df <-
   read_tsv("data/sim_tracts.tsv") %>%
   group_by(name) %>%
   mutate(haplotype = dense_rank(node_id),
-         chrom = paste0("chr1_", haplotype)) %>%
+         chrom = paste0("chr", haplotype)) %>%
   ungroup()
 
 tracts_df
 ```
-
-<!-- ```{r} -->
-<!-- metadata <- read_metadata() -->
-<!-- tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient")) -->
-
-<!-- tracts_df <- select(metadata, name = sampleId, ageAverage, coverage) %>% -->
-<!--   inner_join(tracts_df, by = c("name" = "ID")) %>% -->
-<!--   dplyr::rename(left = start, right = end) -->
-
-<!-- tracts_df <- tracts_df %>% filter(name == "Kostenki") %>% arrange(chrom, left, right) -->
-<!-- tracts_df$chrom_id <- tracts_df$chrom -->
-<!-- ``` -->
 
 ```{r}
 tracts_gr <- tracts_df %>%
@@ -79,11 +68,6 @@ tracts_gr <- tracts_df %>%
     starts.in.df.are.0based = TRUE
   )
 ```
-
-<!-- ```{r} -->
-<!-- seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))] -->
-<!-- genome(tracts_gr) <- "hg19" -->
-<!-- ``` -->
 
 ```{r}
 seqlengths(tracts_gr) <- rep(100e6, 2)
@@ -103,8 +87,9 @@ interval <- 10e3
 sites_grl <- generate_info_sites(tracts_gr, interval = interval)
 distances <- seq(interval, 1e6, by = interval)
 
-if (file.exists("dating_LD_pairs_regular.rds")) {
-  pairs <- readRDS("dating_LD_pairs_regular.rds")
+file <- "dating_LD_pairs_regular.rds"
+if (file.exists(file)) {
+  pairs <- readRDS(file)
 } else {
   tstart <- Sys.time()
 
@@ -115,27 +100,17 @@ if (file.exists("dating_LD_pairs_regular.rds")) {
   tend <- Sys.time()
 
   print(tend - tstart)
-  saveRDS(pairs, "dating_LD_pairs_regular.rds")
+  saveRDS(pairs, file)
 }
 ```
 
 
-### Compute covariance in a given individual
+### Compute covariance in all individuals
 
 ```{r}
-length_cutoff <- 50e3
+length_cutoff <- 0
 
-cov_df <- compute_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
-
-saveRDS(cov_df, "dating_LD_regular_cov.rds")
-```
-
-```{r}
-cov_reg_df <- readRDS("dating_LD_regular_cov.rds")
-```
-
-```{r}
-# cov_df <- cov_ind_df %>%  group_by(sample_age, distance) %>% summarise(covariance = mean(covariance))
+cov_reg_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
 ```
 
 ```{r}
@@ -143,7 +118,7 @@ cov_reg_df %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
   facet_grid(~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances))) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
   theme(legend.position = "bottom")
 ```
 
@@ -158,7 +133,7 @@ ggplot() +
 ```
 
 ```{r}
-chrom <- "chr1_2"
+chrom <- "chr1"
 name <- "EUR_10"
 
 sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
@@ -212,43 +187,15 @@ ggplot() +
 <!-- ``` -->
 
 ```{r}
-grid_df <- expand_grid(chrom = seqlevels(tracts_gr), name = unique(tracts_gr$name))
-
-fit_df <- lapply(1:nrow(grid_df), function(i) {
-  name <- grid_df[i, ]$name
-  chrom <- grid_df[i, ]$chrom
-
-  data_df <- filter(cov_df, name == !!name, chrom == !!chrom)
-  nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df)
-
-  df <- tibble(
-    distance = data_df$distance,
-    covariance = predict(nls_res, newdata = data_df[, "distance"])
-  )
-
-  r <- 1e-8
-
-  tibble(
-    name = name,
-    chrom = chrom,
-    sample_age = data_df$sample_age[1],
-    lambda = exp(coef(nls_res)["lrc"]),
-    t_gens_before = lambda / r,
-    t_admix = t_gens_before * gen_time + sample_age,
-    fit = list(df)
-  )
-}) %>%
-  do.call(rbind, .) %>%
-  unnest(fit)
+fit_reg_df <- fit_exponential(cov_reg_df)
 ```
 
-
 ```{r}
-sample_age <- 0
-name <- sample(filter(cov_df, sample_age == !!sample_age)$name, 1)
+sample_age <- 30000
+name <- sample(filter(cov_reg_df, sample_age == !!sample_age)$name, 1)
 
-ind_cov_df <- filter(cov_df, name == !!name)
-ind_fit_df <- filter(fit_df, name == !!name)
+ind_cov_df <- filter(cov_reg_df, name == !!name)
+ind_fit_df <- filter(fit_reg_df, name == !!name)
 
 ggplot() +
   geom_line(data = ind_cov_df, aes(distance, covariance)) +
@@ -257,7 +204,7 @@ ggplot() +
 ```
 
 ```{r}
-fit_df %>%
+fit_reg_df %>%
 ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
   geom_boxplot() +
   geom_point() +
@@ -269,70 +216,29 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 
 
 
+## Admixture dating using genotype data (tracts)
 
-
-<!-- ### Exponential fitting across all individuals -->
-<!-- ```{r} -->
-<!-- fit_df <- lapply(c(0, 10e3, 20e3, 30e3, 40e3, 50e3), function(sample_age) { -->
-<!--   data_df <- filter(cov_df, sample_age == !!sample_age) -->
-<!--   nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df) -->
-
-<!--   df <- tibble( -->
-<!--     distance = data_df$distance, -->
-<!--     covariance = predict(nls_res, newdata = data_df[, "distance"]) -->
-<!--   ) -->
-
-<!--   tibble( -->
-<!--     sample_age = sample_age, -->
-<!--     lambda = exp(coef(nls_res)["lrc"]), -->
-<!--     t_gens_before = lambda / r, -->
-<!--     t_admix = t_gens_before * gen_time + sample_age, -->
-<!--     fit = list(df) -->
-<!--   ) -->
-<!-- }) %>% do.call(rbind, .) -->
-
-<!-- fit_df -->
-<!-- ``` -->
-
-
-<!-- ```{r} -->
-<!-- p_fit <- ggplot() + -->
-<!--   geom_line(data = cov_df, aes(distance, covariance, color = factor(sample_age))) + -->
-<!--   geom_line(data = unnest(fit_df, fit), aes(distance, covariance, color = factor(sample_age)), linetype = "dashed") -->
-
-<!-- p_fit -->
-
-<!-- p_fit + facet_wrap(~ sample_age) + -->
-<!--   geom_line(data = unnest(fit_df, fit), aes(distance, covariance), linetype = "dashed") -->
-<!-- ``` -->
-
-## Dating admixture using genotype data
+### Define archaic ancestry-informative sites
 
 ```{r}
-model <- read_model("dating_model")
-ts <- ts_load("dating.trees", model = model)
+model <- read_model("data/dating_model")
+ts <- ts_load("data/dating.trees", model = model)
 
-gt <- ts_genotypes(ts)
+gt <- ts_genotypes(ts) %>% setDT()
+names(gt) <- gsub("_chr", "_hap", names(gt))
 ```
 
 ```{r}
-afr_gt <- select(gt, starts_with("AFR"))
-nea_gt <- select(gt, starts_with("NEA"))
+fixed_afr <- gt[, rowMeans(.SD) == 0, .SDcols = patterns("^AFR")]
+fixed_neand <- gt[, rowMeans(.SD) == 1, .SDcols = patterns("^NEA")]
+fixed_sites <- fixed_afr & fixed_neand
 
-fixed_afr <- rowMeans(afr_gt) == 0
-fixed_nea <- rowMeans(nea_gt) == 1
-
-fixed_sites <- fixed_afr & fixed_nea
-
-info_gt <- gt[fixed_sites, ]
-info_sites <- info_gt %>% mutate(index = 1:sum(fixed_sites)) %>% select(pos, index)
+gt <- gt[fixed_sites, .SD, .SDcols = !patterns("^AFR")]
+sites_ir <- IRanges(start = gt$pos, end = gt$pos, index = 1:sum(fixed_sites))
 ```
 
 ```{r}
-sites_grl <- GRangesList(list(
-  makeGRangesFromDataFrame(mutate(info_sites, chrom = "chr1_1"), start.field = "pos", end.field = "pos", keep.extra.columns = TRUE),
-  makeGRangesFromDataFrame(mutate(info_sites, chrom = "chr1_2"), start.field = "pos", end.field = "pos", keep.extra.columns = TRUE)
-))
+sites_grl <- GRangesList(list(GRanges(seqnames = "chr1", sites_ir), GRanges(seqnames = "chr2", sites_ir)))
 seqlevels(sites_grl) <- seqlevels(tracts_gr)
 seqlengths(sites_grl) <- seqlengths(tracts_gr)
 ```
@@ -341,9 +247,9 @@ seqlengths(sites_grl) <- seqlengths(tracts_gr)
 interval <- 10e3
 distances <- seq(interval, 1e6, by = interval)
 
-# unlink("dating_LD_pairs_mutations.rds")
-if (file.exists("dating_LD_pairs_mutations.rds")) {
-  pairs <- readRDS("dating_LD_pairs_mutations.rds")
+file <- "dating_LD_pairs_mutations.rds"
+if (file.exists(file)) {
+  pairs <- readRDS(file)
 } else {
   tstart <- Sys.time()
 
@@ -354,20 +260,14 @@ if (file.exists("dating_LD_pairs_mutations.rds")) {
   tend <- Sys.time()
 
   print(tend - tstart)
-  saveRDS(pairs, "dating_LD_pairs_mutations.rds")
+  saveRDS(pairs, file)
 }
 ```
 
 ```{r}
-length_cutoff <- 50e3
+length_cutoff <- 0
 
-cov_df <- compute_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
-
-saveRDS(cov_df, "dating_LD_mutations_cov.rds")
-```
-
-```{r}
-cov_mut_df <- readRDS("dating_LD_mutations_cov.rds")
+cov_mut_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
 ```
 
 ```{r}
@@ -375,43 +275,218 @@ cov_mut_df %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
   facet_grid(~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
+  theme(legend.position = "bottom")
+```
+
+### Fitting exponential distribution to covariances
+
+```{r}
+fit_mut_df <- fit_exponential(cov_mut_df)
+```
+
+```{r}
+sample_age <- 0
+name <- sample(filter(fit_mut_df, sample_age == !!sample_age)$name, 1)
+
+ind_cov_df <- filter(cov_mut_df, name == !!name)
+ind_fit_df <- filter(fit_mut_df, name == !!name)
+
+ggplot() +
+  geom_line(data = ind_cov_df, aes(distance, covariance)) +
+  geom_line(data = ind_fit_df, aes(distance, covariance), color = "red", linetype = "dashed") +
+  facet_wrap(~ chrom)
+```
+
+```{r}
+fit_mut_df %>%
+ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
+  geom_boxplot() +
+  geom_point() +
+  geom_hline(yintercept = t_admix, linetype = "dashed") +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+```
+
+## Dating admixture using genotype data (info sites)
+
+### Define archaic ancestry-informative sites
+
+```{r}
+model <- read_model("data/dating_model")
+ts <- ts_load("data/dating.trees", model = model)
+metadata <- ts_samples(ts) %>% dplyr::rename(sample_age = time)
+
+gt <- ts_genotypes(ts) %>% setDT()
+names(gt) <- gsub("_chr", "_hap", names(gt))
+```
+
+```{r}
+fixed_afr <- gt[, rowMeans(.SD) == 0, .SDcols = patterns("^AFR")]
+fixed_neand <- gt[, rowMeans(.SD) == 1, .SDcols = patterns("^NEA")]
+fixed_sites <- fixed_afr & fixed_neand
+
+gt <- gt[fixed_sites, .SD, .SDcols = !patterns("^AFR")]
+sites_ir <- IRanges(start = gt$pos, end = gt$pos, index = 1:sum(fixed_sites))
+```
+
+```{r}
+sites_grl <- GRangesList(list(GRanges(seqnames = "chr1", sites_ir), GRanges(seqnames = "chr2", sites_ir)))
+seqlevels(sites_grl) <- seqlevels(tracts_gr)
+seqlengths(sites_grl) <- seqlengths(tracts_gr)
+```
+
+```{r}
+interval <- 10e3
+distances <- seq(interval, 1e6, by = interval)
+
+file <- "dating_LD_pairs_mutations.rds"
+if (file.exists(file)) {
+  pairs <- readRDS(file)
+} else {
+  tstart <- Sys.time()
+
+  pairs <- collect_pairs(sites_grl[1], distances)
+  pairs <- lapply(seqlevels(sites_grl), function(chr) pairs[[1]])
+  names(pairs) <- seqlevels(sites_grl)
+  
+  tend <- Sys.time()
+
+  print(tend - tstart)
+  saveRDS(pairs, file)
+}
+```
+
+```{r}
+# split individual haplotypes into separate "chromosomes"
+# (i.e. an individual's haplotypes "X_1_chr1" and "X_1_chr2" along "chr1",
+# which are produced by ts_genotypes() will be transformed into X_1 column
+# along two chromosomes "chr1", and "chr2" -- this confusing terminology
+# will be later fixed in slendr's ts_genotypes() so that it produces 
+# columns such as "X_1_hap1" and "X_1_hap2" instead)
+info_gt <- lapply(seqlevels(sites_grl), function(chrom) {
+  hap <- gsub("chr", "", chrom)
+
+  new_gt <- copy(gt)
+  new_gt[, chrom := chrom]
+
+  ind_names <- grep(paste0("_hap", hap, "$"), names(gt), value = TRUE)
+  cols <- c("chrom", "pos", ind_names)
+  new_gt <- new_gt[, .SD, .SDcols = cols]
+
+  names(new_gt) <- gsub("_hap\\d", "", names(new_gt))
+
+  new_gt
+}) %>%
+  do.call(rbind, .)
+
+cov_info_df <- compute_match_covariances(info_gt, pairs, metadata)
+```
+
+```{r}
+cov_info_df %>%
+ggplot() +
+  geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
+  facet_grid(~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
+  theme(legend.position = "bottom")
+```
+
+### Fitting exponential distribution to covariances
+
+```{r}
+fit_info_df <- fit_exponential(cov_info_df)
+```
+
+```{r}
+sample_age <- 50000
+name <- sample(filter(fit_mut_df, sample_age == !!sample_age)$name, 1)
+
+ind_cov_df <- filter(cov_info_df, name == !!name)
+ind_fit_df <- filter(fit_info_df, name == !!name)
+
+ggplot() +
+  geom_line(data = ind_cov_df, aes(distance, covariance)) +
+  geom_line(data = ind_fit_df, aes(distance, covariance), color = "red", linetype = "dashed") +
+  facet_wrap(~ chrom)
+```
+
+```{r}
+fit_info_df %>%
+ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
+  geom_boxplot() +
+  geom_point() +
+  geom_hline(yintercept = t_admix, linetype = "dashed") +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+```
+
+## Comparison of exponential fits
+
+```{r}
+cov_df <- rbind(
+  mutate(cov_reg_df, method = "regular sites (using tracts)"),
+  mutate(cov_mut_df, method = "natural sites (using tracts)"),
+  mutate(cov_info_df, method = "natural sites (without tracts)")
+) %>% mutate(method = factor(method, levels = c("regular sites (using tracts)",
+                                                "natural sites (using tracts)",
+                                                "natural sites (without tracts)")))
+```
+
+```{r}
+cov_df %>%
+group_by(method, sample_age, distance) %>%
+summarise(covariance = mean(covariance)) %>%
+ggplot() +
+  geom_line(aes(distance, covariance, color = factor(method))) +
+  facet_grid(~ sample_age) +
   coord_cartesian(xlim = c(0, max(distances))) +
   theme(legend.position = "bottom")
 ```
 
+
 ```{r}
-tracts_gr %>%
-filter(length > length_cutoff) %>%
-as_tibble %>%
-ggplot() +
-  geom_density(aes(length, color = factor(sample_age), group = name)) +
-  facet_grid(. ~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances)))
+fit_df <- rbind(
+  mutate(fit_reg_df, method = "regular sites (using tracts)"),
+  mutate(fit_mut_df, method = "natural sites (using tracts)"),
+  mutate(fit_info_df, method = "natural sites (without tracts)")
+) %>% mutate(method = factor(method, levels = c("regular sites (using tracts)",
+                                                "natural sites (using tracts)",
+                                                "natural sites (without tracts)")))
 ```
 
 ```{r}
-chrom <- "chr1_2"
-name <- "EUR_10"
-
-sites_gr <- sites_grl[seqlevels(sites_grl) == chrom, ] %>% unlist
-ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames == chrom)
-ind_sites_gr <- sites_gr
-
-# mark sites falling within an introgressed tract
-tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
-mcols(ind_sites_gr)$neand <- FALSE
-mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
-mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
-    
-ggplot() +
-  geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
-  geom_point(data = as.data.frame(filter(ind_sites_gr, neand == 1)), aes(x = start, y = 0.05), size = 0.1, color = "black") +
-  geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
-  scale_x_continuous(labels = scales::comma) +
-  expand_limits(x = 0) +
-  theme_minimal() +
-  theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank())
+fit_df %>%
+ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
+  geom_boxplot(aes(fill = factor(sample_age))) +
+  geom_point() +
+  geom_hline(yintercept = t_admix, linetype = "dashed") +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank()) +
+  facet_wrap(~ method)
 ```
 
+## Empirical data
 
+
+### Read inferred ancestry tracts
+
+```{r}
+metadata <- read_metadata()
+tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient"))
+
+tracts_df <- select(metadata, name = sampleId, sample_age = ageAverage, coverage) %>%
+  inner_join(tracts_df, by = c("name" = "ID")) %>%
+  dplyr::rename(left = start, right = end)
+```
+
+```{r}
+seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
+genome(tracts_gr) <- "hg19"
+```
+
+### Read genotypes at informative sites
 

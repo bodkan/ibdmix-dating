@@ -17,7 +17,7 @@ knitr::opts_chunk$set(
 set.seed(42)
 
 unlink("dating_tracts_files", recursive = TRUE)
-unlink(list.files(".", "dating_tracts.*.pdf", "dating.trees"), recursive = TRUE)
+unlink(c("dating_tracts.*.pdf", "dating.trees", "data/sim_tracts.tsv", "data/dating.trees"), recursive = TRUE)
 ```
 
 ```{r}
@@ -50,7 +50,7 @@ gf <- gene_flow(from = nea, to = eur, rate = 0.03, start = t_admix, end = t_admi
 model <- compile_model(
   populations = list(anc, afr, nea, eur), gene_flow = gf,
   generation_time = gen_time,
-  path = "dating_model", overwrite = TRUE, force = TRUE
+  path = "data/dating_model", overwrite = TRUE, force = TRUE
 )
 
 samples <- rbind(
@@ -68,7 +68,7 @@ ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples
 
 tracts <- ts_tracts(ts, census = t_admix, quiet = TRUE)
 
-ts_save(ts, "dating.trees")
+ts_save(ts, "data/dating.trees")
 ```
 
 ```{r, eval=!file.exists("data/sim_tracts.tsv")}

@@ -37,10 +37,15 @@ gf <- gene_flow(from = nea, to = eur, rate = 0.03, start = t_admix, end = t_admi
 
 model <- compile_model(
   populations = list(anc, afr, nea, eur), gene_flow = gf,
-  generation_time = gen_time
+  generation_time = gen_time,
+  path = "data/dating_model", overwrite = TRUE, force = TRUE
 )
 
-samples <- schedule_sampling(model, times = c(50, 40, 30, 20, 10, 0) * 1e3, list(eur, 10))
+samples <- rbind(
+  schedule_sampling(model, times = 50e3, list(nea, 2)),
+  schedule_sampling(model, times = c(50, 40, 30, 20, 10, 0) * 1e3, list(eur, 10)),
+  schedule_sampling(model, times = 0, list(afr, 100))
+)
 
 plot_model(model, proportions = TRUE, order = c("AFR", "EUR", "ancestor", "NEA"))
 ```
@@ -48,9 +53,12 @@ plot_model(model, proportions = TRUE, order = c("AFR", "EUR", "ancestor", "NEA")
 ![](dating_tracts_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
 
 ``` r
-ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples = samples, random_seed = 42)
+ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples = samples, random_seed = 42) %>%
+  ts_mutate(1e-8, random_seed = 42)
 
 tracts <- ts_tracts(ts, census = t_admix, quiet = TRUE)
+
+ts_save(ts, "data/dating.trees")
 ```
 
 ``` r
@@ -66,7 +74,7 @@ write.table(tracts_df, file = "data/sim_tracts.tsv",
 
 ``` r
 tracts_df <- read_tsv("data/sim_tracts.tsv")
-#> Rows: 4280 Columns: 7
+#> Rows: 2654 Columns: 7
 #> ── Column specification ────────────────────────────────────────────────────────
 #> Delimiter: "\t"
 #> chr (2): name, pop
@@ -79,12 +87,12 @@ head(tracts_df)
 #> # A tibble: 6 × 7
 #>   name  sample_age pop   node_id     left    right  length
 #>   <chr>      <dbl> <chr>   <dbl>    <dbl>    <dbl>   <dbl>
-#> 1 EUR_1      50000 EUR         0 19127220 19527944  400724
-#> 2 EUR_1      50000 EUR         0 50960983 51219943  258960
-#> 3 EUR_1      50000 EUR         0 54542568 55565589 1023021
-#> 4 EUR_1      50000 EUR         0 59782108 59938917  156809
-#> 5 EUR_1      50000 EUR         0 95275454 96092356  816902
-#> 6 EUR_1      50000 EUR         1   482833   887166  404333
+#> 1 EUR_1      50000 EUR         0 18426078 20213683 1787605
+#> 2 EUR_1      50000 EUR         0 20782516 21286174  503658
+#> 3 EUR_1      50000 EUR         0 39419462 39687617  268155
+#> 4 EUR_1      50000 EUR         0 42694241 43332169  637928
+#> 5 EUR_1      50000 EUR         0 44959925 44984615   24690
+#> 6 EUR_1      50000 EUR         0 61453907 61839901  385994
 ```
 
 ## How does admixture dating work?
@@ -147,7 +155,7 @@ simulated individual
 
 ``` r
 head(tract_lengths, 10)
-#>  [1]  21534  13565  15525  15010 100187  84661  33149  12517  13644 225368
+#>  [1] 141083  75118 228914 169361  18097  52618 199785  23805  53689  14066
 ```
 
 we can compute $\hat{\lambda}$:
@@ -155,7 +163,7 @@ we can compute $\hat{\lambda}$:
 ``` r
 lambda_hat <- 1 / mean(tract_lengths)
 lambda_hat
-#> [1] 1.464982e-05
+#> [1] 1.485309e-05
 ```
 
 And get the estimate of time since Neanderthal admixture in the history
@@ -165,7 +173,7 @@ of this individual:
 r <- 1e-8 # recombination rate (crossovers per bp per generation)
 
 lambda_hat / r # admixture time in "generations before this individual lived"
-#> [1] 1464.982
+#> [1] 1485.309
 ```
 
 To get the absolute admixture time, we convert generations to years and
@@ -173,7 +181,7 @@ add the “radiocarbon date” of this individual:
 
 ``` r
 lambda_hat / r * gen_time + 10000 # absolute admixture time in "years ago"
-#> [1] 49554.52
+#> [1] 50103.36
 ```
 
 **But what if we have filtered data? Traditionally, tracts are filtered
