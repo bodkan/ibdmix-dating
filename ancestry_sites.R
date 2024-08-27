@@ -7,6 +7,7 @@ args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 1) stop("Incorrect arguments", call. = FALSE)
 
 filename <- args[1]
+filename <- "gt_chr21.tsv"
 
 check_genotypes <- function(gt) {
   gt[, unique(unlist(lapply(.SD, function(x) unique(x)))), .SDcols = !c("chrom", "pos", "ref", "alt")]
@@ -58,12 +59,14 @@ info_gt <- info_gt[, .SD, .SDcols = !non_phased]
 
 check_genotypes(info_gt)
 
-# split diploid genotypes into haploid phased chromosome genotypes
+# get all samples to use for further processing
 ancient_samples <- metadata[dataSource == "thisStudy", sampleId]
 modern_samples <- metadata[dataSource == "1000g" & popId == "GBR", sampleId]
 samples <- intersect(colnames(info_gt), c(ancient_samples, modern_samples))
 #samples <- setdiff(names(info_gt), c("chrom", "pos", "ref", "alt"))
+info_gt <- info_gt[, .SD, .SDcols = c("chrom", "pos", samples)]
 
+# split diploid genotypes into haploid phased chromosome genotypes
 for (i in seq_along(samples)) {
   ind <- samples[i]
   cat("Processing", ind, "[", i, "/", length(samples), " ]...")
