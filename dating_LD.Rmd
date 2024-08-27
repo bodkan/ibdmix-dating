@@ -484,6 +484,17 @@ tracts_df <- select(metadata, name = sampleId, sample_age = ageAverage, coverage
 ```
 
 ```{r}
+tracts_gr <- tracts_df %>%
+  makeGRangesFromDataFrame(
+    start.field = "left",
+    end.field = "right",
+    keep.extra.columns = TRUE,
+    ignore.strand = TRUE,
+    starts.in.df.are.0based = TRUE
+  )
+```
+
+```{r}
 seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
 genome(tracts_gr) <- "hg19"
 ```
