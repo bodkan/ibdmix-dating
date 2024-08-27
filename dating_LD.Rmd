@@ -87,7 +87,7 @@ interval <- 10e3
 sites_grl <- generate_info_sites(tracts_gr, interval = interval)
 distances <- seq(interval, 1e6, by = interval)
 
-file <- "dating_LD_pairs_tracts_regular.rds"
+file <- "dating_LD_pairs_regular.rds"
 if (file.exists(file)) {
   pairs <- readRDS(file)
 } else {
@@ -248,7 +248,7 @@ seqlengths(sites_grl) <- seqlengths(tracts_gr)
 interval <- 10e3
 distances <- seq(interval, 1e6, by = interval)
 
-file <- "dating_LD_pairs_tracts_mutations.rds"
+file <- "dating_LD_pairs_mutations.rds"
 if (file.exists(file)) {
   pairs <- readRDS(file)
 } else {
@@ -342,7 +342,7 @@ seqlengths(sites_grl) <- seqlengths(tracts_gr)
 interval <- 10e3
 distances <- seq(interval, 1e6, by = interval)
 
-file <- "dating_LD_pairs_info_mutations.rds"
+file <- "dating_LD_pairs_mutations.rds"
 if (file.exists(file)) {
   pairs <- readRDS(file)
 } else {
