@@ -226,7 +226,7 @@ interval <- 10e3
 sites_grl <- generate_info_sites(tracts_gr, interval = interval)
 distances <- seq(interval, 1e6, by = interval)
 
-file <- "dating_LD_pairs_tracts_regular.rds"
+file <- "dating_LD_pairs_regular.rds"
 if (file.exists(file)) {
   pairs <- readRDS(file)
 } else {
@@ -371,8 +371,7 @@ fixed_afr <- gt[, rowMeans(.SD) == 0, .SDcols = patterns("^AFR")]
 fixed_neand <- gt[, rowMeans(.SD) == 1, .SDcols = patterns("^NEA")]
 fixed_sites <- fixed_afr & fixed_neand
 
-gt <- gt[fixed_sites]
-gt <- gt[, .SD, .SDcols = !patterns("^AFR")]
+gt <- gt[fixed_sites, .SD, .SDcols = !patterns("^AFR")]
 sites_ir <- IRanges(start = gt$pos, end = gt$pos, index = 1:sum(fixed_sites))
 ```
 
@@ -386,7 +385,7 @@ seqlengths(sites_grl) <- seqlengths(tracts_gr)
 interval <- 10e3
 distances <- seq(interval, 1e6, by = interval)
 
-file <- "dating_LD_pairs_tracts_mutations.rds"
+file <- "dating_LD_pairs_mutations.rds"
 if (file.exists(file)) {
   pairs <- readRDS(file)
 } else {
@@ -427,7 +426,7 @@ fit_mut_df <- fit_exponential(cov_mut_df)
 ```
 
 ``` r
-sample_age <- 30000
+sample_age <- 0
 name <- sample(filter(fit_mut_df, sample_age == !!sample_age)$name, 1)
 
 ind_cov_df <- filter(cov_mut_df, name == !!name)
@@ -487,7 +486,7 @@ seqlengths(sites_grl) <- seqlengths(tracts_gr)
 interval <- 10e3
 distances <- seq(interval, 1e6, by = interval)
 
-file <- "dating_LD_pairs_info_mutations.rds"
+file <- "dating_LD_pairs_mutations.rds"
 if (file.exists(file)) {
   pairs <- readRDS(file)
 } else {
@@ -505,6 +504,12 @@ if (file.exists(file)) {
 ```
 
 ``` r
+# split individual haplotypes into separate "chromosomes"
+# (i.e. an individual's haplotypes "X_1_chr1" and "X_1_chr2" along "chr1",
+# which are produced by ts_genotypes() will be transformed into X_1 column
+# along two chromosomes "chr1", and "chr2" -- this confusing terminology
+# will be later fixed in slendr's ts_genotypes() so that it produces 
+# columns such as "X_1_hap1" and "X_1_hap2" instead)
 info_gt <- lapply(seqlevels(sites_grl), function(chrom) {
   hap <- gsub("chr", "", chrom)
 
@@ -542,7 +547,7 @@ fit_info_df <- fit_exponential(cov_info_df)
 ```
 
 ``` r
-sample_age <- 10000
+sample_age <- 50000
 name <- sample(filter(fit_mut_df, sample_age == !!sample_age)$name, 1)
 
 ind_cov_df <- filter(cov_info_df, name == !!name)
@@ -573,10 +578,12 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 
 ``` r
 cov_df <- rbind(
-  mutate(cov_reg_df, method = "pairwise regular tracts"),
-  mutate(cov_mut_df, method = "pairwise info tracts"),
-  mutate(cov_info_df, method = "pairwise info")
-)
+  mutate(cov_reg_df, method = "regular sites (using tracts)"),
+  mutate(cov_mut_df, method = "natural sites (using tracts)"),
+  mutate(cov_info_df, method = "natural sites (without tracts)")
+) %>% mutate(method = factor(method, levels = c("regular sites (using tracts)",
+                                                "natural sites (using tracts)",
+                                                "natural sites (without tracts)")))
 ```
 
 ``` r
@@ -596,10 +603,12 @@ ggplot() +
 
 ``` r
 fit_df <- rbind(
-  mutate(fit_reg_df, method = "pairwise regular tracts"),
-  mutate(fit_mut_df, method = "pairwise info tracts"),
-  mutate(fit_info_df, method = "pairwise info")
-)
+  mutate(fit_reg_df, method = "regular sites (using tracts)"),
+  mutate(fit_mut_df, method = "natural sites (using tracts)"),
+  mutate(fit_info_df, method = "natural sites (without tracts)")
+) %>% mutate(method = factor(method, levels = c("regular sites (using tracts)",
+                                                "natural sites (using tracts)",
+                                                "natural sites (without tracts)")))
 ```
 
 ``` r
