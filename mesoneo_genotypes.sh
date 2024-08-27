@@ -2,7 +2,7 @@
 
 set -e
 
-for chrom in 21; do #$(seq 1 22); do
+for chrom in $(seq 1 22); do
 
   echo "Processing chromosome $chrom..."
 
