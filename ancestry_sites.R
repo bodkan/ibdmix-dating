@@ -7,7 +7,6 @@ args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 1) stop("Incorrect arguments", call. = FALSE)
 
 filename <- args[1]
-filename <- "gt_chr21.tsv"
 
 check_genotypes <- function(gt) {
   gt[, unique(unlist(lapply(.SD, function(x) unique(x)))), .SDcols = !c("chrom", "pos", "ref", "alt")]
