@@ -50,7 +50,7 @@ gf <- gene_flow(from = nea, to = eur, rate = 0.03, start = t_admix, end = t_admi
 model <- compile_model(
   populations = list(anc, afr, nea, eur), gene_flow = gf,
   generation_time = gen_time,
-  path = "dating_model", overwrite = TRUE, force = TRUE
+  path = "data/dating_model", overwrite = TRUE, force = TRUE
 )
 
 samples <- rbind(

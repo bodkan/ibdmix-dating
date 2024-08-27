@@ -221,8 +221,8 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 ### Define archaic ancestry-informative sites
 
 ```{r}
-model <- read_model("dating_model")
-ts <- ts_load("dating.trees", model = model)
+model <- read_model("data/dating_model")
+ts <- ts_load("data/dating.trees", model = model)
 
 gt <- ts_genotypes(ts) %>% setDT()
 names(gt) <- gsub("_chr", "_hap", names(gt))
@@ -314,8 +314,8 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 ### Define archaic ancestry-informative sites
 
 ```{r}
-model <- read_model("dating_model")
-ts <- ts_load("dating.trees", model = model)
+model <- read_model("data/dating_model")
+ts <- ts_load("data/dating.trees", model = model)
 metadata <- ts_samples(ts) %>% dplyr::rename(sample_age = time)
 
 gt <- ts_genotypes(ts) %>% setDT()
