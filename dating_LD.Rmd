@@ -472,18 +472,21 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 ## Empirical data
 
 
-<!-- ```{r} -->
-<!-- metadata <- read_metadata() -->
-<!-- tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient")) -->
+### Read inferred ancestry tracts
 
-<!-- tracts_df <- select(metadata, name = sampleId, ageAverage, coverage) %>% -->
-<!--   inner_join(tracts_df, by = c("name" = "ID")) %>% -->
-<!--   dplyr::rename(left = start, right = end) -->
+```{r}
+metadata <- read_metadata()
+tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient"))
 
-<!-- tracts_df <- tracts_df %>% filter(name == "Kostenki") %>% arrange(chrom, left, right) -->
-<!-- tracts_df$chrom_id <- tracts_df$chrom -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))] -->
-<!-- genome(tracts_gr) <- "hg19" -->
-<!-- ``` -->
+tracts_df <- select(metadata, name = sampleId, sample_age = ageAverage, coverage) %>%
+  inner_join(tracts_df, by = c("name" = "ID")) %>%
+  dplyr::rename(left = start, right = end)
+```
+
+```{r}
+seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
+genome(tracts_gr) <- "hg19"
+```
+
+### Read genotypes at informative sites
+
