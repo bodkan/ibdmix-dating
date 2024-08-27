@@ -422,9 +422,9 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 
 ```{r}
 cov_df <- rbind(
-  mutate(cov_reg_df, method = "pairwise regular tracts"),
-  mutate(cov_mut_df, method = "pairwise info tracts"),
-  mutate(cov_info_df, method = "pairwise info")
+  mutate(cov_reg_df, method = "tracts -- regular sites"),
+  mutate(cov_mut_df, method = "tracts -- natural sites"),
+  mutate(cov_info_df, method = "no tracts -- natural sites")
 )
 ```
 
@@ -442,9 +442,9 @@ ggplot() +
 
 ```{r}
 fit_df <- rbind(
-  mutate(fit_reg_df, method = "pairwise regular tracts"),
-  mutate(fit_mut_df, method = "pairwise info tracts"),
-  mutate(fit_info_df, method = "pairwise info")
+  mutate(fit_reg_df, method = "tracts -- regular sites"),
+  mutate(fit_mut_df, method = "tracts -- natural sites"),
+  mutate(fit_info_df, method = "no tracts -- natural sites")
 )
 ```
 
