@@ -920,6 +920,20 @@ inner_join(
   all()
 ```
 
+```{r}
+results_df %>%
+filter(min_length == 50e3) %>%
+ggplot(aes(factor(sample_age), t_inferred, color = method, group = method)) +
+  geom_line() +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  geom_hline(yintercept = 55e3, linetype = "dashed") +
+  theme_bw() +
+  labs(x = "average sample age in a group",
+       y = "time of Neanderthal admixture [years ago]") +
+  ggtitle("Inferred Neanderthal admixture time for each age group")
+```
+
+
 ## Fitting exponential decay of truncated distributions
 
 Exploring the basic modeling techniques used above.
