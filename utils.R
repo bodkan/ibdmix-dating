@@ -240,13 +240,25 @@ generate_info_sites <- function(tracts_gr, interval) {
 
 # Define list of pairs of sites at given distances
 # (one element of the list for each distance bin)
-collect_pairs <- function(sites_grl, distances, ncores = parallel::detectCores()) {
+collect_pairs <- function(sites_grl, distances, recmap = NULL, ncores = parallel::detectCores()) {
+
+  if (is.null(recmap)) {
+    chrom_lengths <- seqlengths(sites_grl)
+  } else {
+    chrom_lengths <- split(recmap, recmap$chrom) %>% sapply(function(recmap_chr) max(recmap_chr$posg))
+    names(chrom_lengths) <- paste0("chr", names(chrom_lengths))
+  }
 
   chroms <- sapply(sites_grl, function(x) as.character(unique(seqnames(x))))
 
   chr_pairs <- lapply(chroms, function(chrom) {
 
     sites_gr <- sites_grl[chroms == chrom, ] %>% unlist
+    if (is.null(recmap)) {
+      site_pos <- start(sites_gr)
+    } else {
+      site_pos <- convert_genetic(recmap, as.data.table(sites_gr), "start", chrom = "seqnames")$start_gen
+    }
 
     pairs <- parallel::mclapply(distances, function(distance) {
 
@@ -257,10 +269,10 @@ collect_pairs <- function(sites_grl, distances, ncores = parallel::detectCores()
       for (i in sites_gr$index) {
         index1 <- i
         # ... and find the index of the first site that is at a given distance
-        index2 <- sites_gr[start(sites_gr) >= start(sites_gr[i]) + distance]$index[1]
+        index2 <- sites_gr[site_pos >= site_pos[i] + distance]$index[1]
 
         if (is.na(index2)) {
-          if (seqlengths(sites_gr)[chrom] < start(sites_gr[i]) + distance  + distance / 10)
+          if (chrom_lengths[chrom] < site_pos[i] + distance  + distance / 10)
             break
           else
             next
@@ -298,7 +310,8 @@ compute_tract_covariances <- function(tracts_gr, sites_grl, pairs) {
       # mark sites falling within an introgressed tract
       tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
       mcols(ind_sites_gr)$neand <- FALSE
-      mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
+      if (length(tract_overlaps) > 0)
+        mcols(ind_sites_gr[tract_overlaps])$neand <- TRUE
       mcols(ind_sites_gr)$neand <- as.integer(mcols(ind_sites_gr)$neand)
 
       covariances <- sapply(seq_along(distances), function(i) {
@@ -322,12 +335,13 @@ compute_tract_covariances <- function(tracts_gr, sites_grl, pairs) {
 # Compute covariances of allele states at pairs of sites
 compute_match_covariances <- function(info_gt, pairs, metadata) {
   archaic_name <- "NEA_1"
+  samples <- setdiff(colnames(info_gt), c("chrom", "pos", archaic_name))
 
   lapply(unique(info_gt$chrom), function(chrom) {
 
     chrom_info_gt <- info_gt[, .SD[chrom %in% ..chrom, ], .SDcols = !c("chrom", "pos")]
 
-    parallel::mclapply(colnames(chrom_info_gt), function(name) {
+    parallel::mclapply(samples, function(name) {
 
       ind_matches <- chrom_info_gt[, .(match = .SD[, get(name) == .SD[, get(archaic_name)]])]
 
@@ -340,7 +354,7 @@ compute_match_covariances <- function(info_gt, pairs, metadata) {
       tibble(
         chrom = chrom,
         name = name,
-        sample_age = filter(metadata, name == !!name)$sample_age,
+        sample_age = filter(metadata, name == gsub("_hap\\d", "", !!name))$sample_age,
         distance = distances,
         covariance = covariances
       )
@@ -348,7 +362,9 @@ compute_match_covariances <- function(info_gt, pairs, metadata) {
   }) %>% do.call(rbind, .)
 }
 
-fit_exponential <- function(cov_df) {
+fit_exponential <- function(cov_df, distance) {
+  distance <- match.arg(distance, choices = c("physical", "genetic"))
+
   grid_df <- expand_grid(chrom = unique(cov_df$chrom), name = unique(cov_df$name))
 
   fit_df <- lapply(1:nrow(grid_df), function(i) {
@@ -370,14 +386,12 @@ fit_exponential <- function(cov_df) {
     } else
       df <- NULL
 
-    r <- 1e-8
-
     tibble(
       name = name,
       chrom = chrom,
       sample_age = data_df$sample_age[1],
       lambda = lambda,
-      t_gens_before = lambda / r,
+      t_gens_before = ifelse(distance == "physical", lambda / 1e-8, lambda),
       t_admix = t_gens_before * gen_time + sample_age,
       fit = list(df)
     )
@@ -385,3 +399,33 @@ fit_exponential <- function(cov_df) {
     do.call(rbind, .) %>%
     unnest(fit)
 }
+
+
+# conversion of physical distances to genetic distances ---------------------------------------
+
+read_recmap <- function(path) {
+  if (!dir.exists(path))
+    stop("Path '", path, "' does not exist", call. = FALSE)
+
+  files <- list.files(path, "plink.chr\\d+.*.map", full.names = TRUE)
+  lapply(files, function(f) readr::read_tsv(f, col_names = c("chrom", "_", "posg", "pos"))) %>%
+    do.call(rbind, .)
+}
+
+convert_genetic <- function(recmap, df, cols, chrom = "chrom") {
+  interpolators <- recmap %>%
+    split(.$chrom) %>%
+    lapply(function(chrom_map) approxfun(chrom_map$pos, chrom_map$posg, rule = 2))
+
+  df %>%
+    { split(., .[[chrom]]) } %>%
+    lapply(function(chrom_df) {
+      chrom <- as.integer(gsub("chr", "", chrom_df[[chrom]][1]))
+      for (c in cols) {
+        chrom_df[[paste0(c, "_gen")]] <- interpolators[[!!chrom]](chrom_df[[c]])
+      }
+      chrom_df
+    }) %>%
+    do.call(rbind, .)
+}
+
