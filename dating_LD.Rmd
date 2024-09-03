@@ -51,8 +51,8 @@ t_admix <- round(55000 / gen_time) * gen_time
 tracts_df <-
   read_tsv("data/sim_tracts.tsv") %>%
   group_by(name) %>%
-  mutate(haplotype = dense_rank(node_id),
-         chrom = paste0("chr", haplotype)) %>%
+  mutate(#haplotype = dense_rank(node_id),
+         chrom = paste0("chr", 1)) %>% #haplotype)) %>%
   ungroup()
 
 tracts_df
@@ -70,14 +70,14 @@ tracts_gr <- tracts_df %>%
 ```
 
 ```{r}
-seqlengths(tracts_gr) <- rep(100e6, 2)
+seqlengths(tracts_gr) <- 100e6 #rep(100e6, 2)
 ```
 
 ```{r}
 tracts_gr
 ```
 
-## Admixture dating using regularly-spaced loci
+## Admixture dating using regularly-spaced loci (tracts)
 
 ### Define regularly spaced ancestry-informative sites
 
@@ -93,8 +93,7 @@ if (file.exists(file)) {
 } else {
   tstart <- Sys.time()
 
-  pairs <- collect_pairs(sites_grl[1], distances)
-  pairs <- lapply(seqlevels(sites_grl), function(chr) pairs[[1]])
+  pairs <- collect_pairs(sites_grl, distances)
   names(pairs) <- seqlevels(sites_grl)
   
   tend <- Sys.time()
@@ -270,8 +269,8 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 model <- read_model("data/dating_model")
 ts <- ts_load("data/dating.trees", model = model)
 
-gt <- ts_genotypes(ts) %>% setDT()
-names(gt) <- gsub("_chr", "_hap", names(gt))
+gt <- ts_genotypes(ts) %>% mutate(chrom = "chr1") %>% select(chrom, pos, everything()) %>% setDT()
+names(gt) <- c("chrom", "pos", gsub("_chr", "_hap", names(gt[, .SD, .SDcols = !c("chrom", "pos")])))
 ```
 
 ```{r}
@@ -280,11 +279,12 @@ fixed_neand <- gt[, rowMeans(.SD) == 1, .SDcols = patterns("^NEA")]
 fixed_sites <- fixed_afr & fixed_neand
 
 gt <- gt[fixed_sites, .SD, .SDcols = !patterns("^AFR")]
-sites_ir <- IRanges(start = gt$pos, end = gt$pos, index = 1:sum(fixed_sites))
+sites_gr <- makeGRangesFromDataFrame(gt[, .(chrom, pos)], start.field = "pos", end.field = "pos")
+mcols(sites_gr)$index <- 1:nrow(gt)
 ```
 
 ```{r}
-sites_grl <- GRangesList(list(GRanges(seqnames = "chr1", sites_ir), GRanges(seqnames = "chr2", sites_ir)))
+sites_grl <- GRangesList(list(sites_gr))
 seqlevels(sites_grl) <- seqlevels(tracts_gr)
 seqlengths(sites_grl) <- seqlengths(tracts_gr)
 ```
@@ -299,8 +299,7 @@ if (file.exists(file)) {
 } else {
   tstart <- Sys.time()
 
-  pairs <- collect_pairs(sites_grl[1], distances)
-  pairs <- lapply(seqlevels(sites_grl), function(chr) pairs[[1]])
+  pairs <- collect_pairs(sites_grl, distances)
   names(pairs) <- seqlevels(sites_grl)
   
   tend <- Sys.time()
@@ -378,7 +377,7 @@ cowplot::plot_grid(p1, p2, nrow = 1, rel_widths = c(1, 1.2))
 ### Fitting exponential distribution to covariances
 
 ```{r}
-fit_mut_df <- fit_exponential(cov_mut_df)
+fit_mut_df <- fit_exponential(cov_mut_df, distance = "physical")
 ```
 
 ```{r}
@@ -414,8 +413,8 @@ model <- read_model("data/dating_model")
 ts <- ts_load("data/dating.trees", model = model)
 metadata <- ts_samples(ts) %>% dplyr::rename(sample_age = time)
 
-gt <- ts_genotypes(ts) %>% setDT()
-names(gt) <- gsub("_chr", "_hap", names(gt))
+gt <- ts_genotypes(ts) %>% mutate(chrom = "chr1") %>% select(chrom, pos, everything()) %>% setDT()
+names(gt) <- c("chrom", "pos", gsub("_chr", "_hap", names(gt[, .SD, .SDcols = !c("chrom", "pos")])))
 ```
 
 ```{r}
@@ -424,11 +423,12 @@ fixed_neand <- gt[, rowMeans(.SD) == 1, .SDcols = patterns("^NEA")]
 fixed_sites <- fixed_afr & fixed_neand
 
 gt <- gt[fixed_sites, .SD, .SDcols = !patterns("^AFR")]
-sites_ir <- IRanges(start = gt$pos, end = gt$pos, index = 1:sum(fixed_sites))
+sites_gr <- makeGRangesFromDataFrame(gt[, .(chrom, pos)], start.field = "pos", end.field = "pos")
+mcols(sites_gr)$index <- 1:nrow(gt)
 ```
 
 ```{r}
-sites_grl <- GRangesList(list(GRanges(seqnames = "chr1", sites_ir), GRanges(seqnames = "chr2", sites_ir)))
+sites_grl <- GRangesList(list(sites_gr))
 seqlevels(sites_grl) <- seqlevels(tracts_gr)
 seqlengths(sites_grl) <- seqlengths(tracts_gr)
 ```
@@ -454,28 +454,12 @@ if (file.exists(file)) {
 }
 ```
 
+### Compute covariance in all individuals
+
 ```{r}
-# split individual haplotypes into separate "chromosomes"
-# (i.e. an individual's haplotypes "X_1_chr1" and "X_1_chr2" along "chr1",
-# which are produced by ts_genotypes() will be transformed into X_1 column
-# along two chromosomes "chr1", and "chr2" -- this confusing terminology
-# will be later fixed in slendr's ts_genotypes() so that it produces 
-# columns such as "X_1_hap1" and "X_1_hap2" instead)
-info_gt <- lapply(seqlevels(sites_grl), function(chrom) {
-  hap <- gsub("chr", "", chrom)
-
-  new_gt <- copy(gt)
-  new_gt[, chrom := chrom]
-
-  ind_names <- grep(paste0("_hap", hap, "$"), names(gt), value = TRUE)
-  cols <- c("chrom", "pos", ind_names)
-  new_gt <- new_gt[, .SD, .SDcols = cols]
-
-  names(new_gt) <- gsub("_hap\\d", "", names(new_gt))
-
-  new_gt
-}) %>%
-  do.call(rbind, .)
+info_gt <- copy(gt)
+info_gt[, NEA_1 := NEA_1_hap1]
+info_gt[, (c("NEA_1_hap1", "NEA_1_hap2", "NEA_2_hap1", "NEA_2_hap2")) := NULL]
 
 cov_info_df <- compute_match_covariances(info_gt, pairs, metadata)
 ```
@@ -492,20 +476,21 @@ ggplot() +
 ### Fitting exponential distribution to covariances
 
 ```{r}
-fit_info_df <- fit_exponential(cov_info_df)
+fit_info_df <- fit_exponential(cov_info_df, distance = "physical")
 ```
 
 ```{r}
-sample_age <- 50000
-name <- sample(filter(fit_mut_df, sample_age == !!sample_age)$name, 1)
+sample_age <- sample(unique(fit_info_df$sample_age), 1)
+name <- sample(filter(fit_info_df, sample_age == !!sample_age)$name, 1) %>%
+  gsub("_hap\\d$", "", .)
 
-ind_cov_df <- filter(cov_info_df, name == !!name)
-ind_fit_df <- filter(fit_info_df, name == !!name)
+ind_cov_df <- filter(cov_info_df, grepl(paste0(!!name, "_hap"), name)) %>% mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
+ind_fit_df <- filter(fit_info_df, grepl(paste0(!!name, "_hap"), name)) %>% mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
 
 ggplot() +
   geom_line(data = ind_cov_df, aes(distance, covariance)) +
   geom_line(data = ind_fit_df, aes(distance, covariance), color = "red", linetype = "dashed") +
-  facet_wrap(~ chrom)
+  facet_wrap(~ hap)
 ```
 
 ```{r}
@@ -694,7 +679,7 @@ cowplot::plot_grid(p1, p2, nrow = 1)
 ### Fitting exponential distribution to covariances
 
 ```{r}
-fit_emp_df <- fit_exponential(cov_emp_df) %>%
+fit_emp_df <- fit_exponential(cov_emp_df, distance = "physical") %>%
   mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
 ```
 
