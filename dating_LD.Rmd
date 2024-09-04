@@ -646,23 +646,24 @@ cov_emp_df %>%
   summarise(covariance = mean(covariance)) %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = age_group)) +
-  guides(color = "none") +
   theme(legend.position = "bottom")
 ```
 
 
 ```{r}
-sample_age <- max(cov_emp_df$sample_age)
+sample_age <- sample(cov_emp_df$sample_age, 1)
 name <- sample(filter(cov_emp_df, sample_age == !!sample_age)$name, 1) %>%
   gsub("_hap\\d$", "", .)
+
+name <- "NEO192"
 
 p1 <- cov_emp_df %>%
 filter(grepl(!!name, name)) %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(interaction(name, chrom)))) +
   coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
-  guides(color = "none") +
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom") +
+  ggtitle(paste0(name, ", ", sample_age, "kya"))
 p2 <- cov_emp_df %>%
   filter(grepl(!!name, name)) %>%
   group_by(distance) %>%
@@ -674,6 +675,53 @@ ggplot() +
   theme(legend.position = "bottom")
 
 cowplot::plot_grid(p1, p2, nrow = 1)
+```
+
+```{r}
+name <- "NEO192"
+
+chroms <- paste0("chr", 1:22)
+
+pdf(paste0(name, ".pdf"), width = 10, height = 6)
+
+for (chrom in chroms) {
+
+sites_gr <- sites_grl[seqlevels(sites_grl) %in% chrom, ] %>% unlist
+ind_tracts_gr <- tracts_gr %>% filter(name == !!name, seqnames %in% chrom)
+ind_sites_gr <- sites_gr
+
+# mark sites falling within an introgressed tract
+tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
+mcols(ind_sites_gr)$tract <- FALSE
+mcols(ind_sites_gr[tract_overlaps])$tract <- TRUE
+mcols(ind_sites_gr)$tract <- as.integer(mcols(ind_sites_gr)$tract)
+
+# data.table is stupid:
+ch <- chrom
+matches_dt <-
+  info_gt[chrom == ch,
+          .(hap1_match = as.integer(get(paste0(name, "_hap1")) == NEA_1),
+            hap2_match = as.integer(get(paste0(name, "_hap2")) == NEA_1))]
+mcols(ind_sites_gr)$hap1_match <- matches_dt$hap1_match
+mcols(ind_sites_gr)$hap2_match <- matches_dt$hap2_match
+    
+p <- ggplot() +
+  geom_rect(data = as.data.frame(ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
+  geom_point(data = as.data.frame(filter(ind_sites_gr, tract == 1)), aes(x = start, y = 0.05), size = 0.1, color = "darkgreen") +
+  geom_point(data = as.data.frame(filter(ind_sites_gr, hap1_match == 1)), aes(x = start, y = 0.03), size = 0.1, color = "orange") +
+  geom_point(data = as.data.frame(filter(ind_sites_gr, hap2_match == 1)), aes(x = start, y = 0.01), size = 0.1, color = "pink") +
+  geom_point(data = as.data.frame(ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
+  scale_x_continuous(labels = scales::comma) +
+  expand_limits(x = 0) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank()) +
+  facet_wrap(~seqnames)
+
+print(p)
+
+}
+
+dev.off()
 ```
 
 ### Fitting exponential distribution to covariances
