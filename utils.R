@@ -246,8 +246,6 @@ collect_pairs <- function(sites_grl, distances, recmap = NULL, ncores = parallel
     chrom_lengths <- seqlengths(sites_grl)
   } else {
     chrom_lengths <- split(recmap, recmap$chrom) %>% sapply(function(recmap_chr) max(recmap_chr$posg))
-    if (is.null(names(chrom_lengths)))
-      names(chrom_lengths) <- paste0("chr", names(chrom_lengths))
   }
 
   chroms <- sapply(sites_grl, function(x) as.character(unique(seqnames(x))))
@@ -413,7 +411,8 @@ read_recmap <- function(path) {
 
   files <- list.files(path, "plink.chr\\d+.*.map", full.names = TRUE)
   lapply(files, function(f) readr::read_tsv(f, col_names = c("chrom", "_", "posg", "pos"))) %>%
-    do.call(rbind, .)
+    do.call(rbind, .) %>%
+    mutate(chrom = paste0("chr", chrom))
 }
 
 convert_genetic <- function(recmap, df, cols, chrom = "chrom") {
@@ -424,6 +423,7 @@ convert_genetic <- function(recmap, df, cols, chrom = "chrom") {
   df %>%
     { split(., .[[chrom]]) } %>%
     lapply(function(chrom_df) {
+      if (!nrow(chrom_df)) return(NULL)
       chrom <- as.integer(gsub("chr", "", chrom_df[[chrom]][1]))
       for (c in cols) {
         chrom_df[[paste0(c, "_gen")]] <- interpolators[[!!chrom]](chrom_df[[c]])
