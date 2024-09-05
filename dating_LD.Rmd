@@ -261,6 +261,162 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Admixture dating using regularly-spaced loci (tracts, genetic distances)
+
+```{r}
+recmap <- tibble(chrom = "chr1", asd = ".", pos = c(1, 100e6), posg = c(0, 100))
+recmap
+```
+
+### Define regularly spaced ancestry-informative sites
+
+```{r}
+interval <- 10e3
+
+sites_grl <- generate_info_sites(tracts_gr, interval = interval)
+
+# compute distance bins in cM (in steps corresponding to 10 kb ~ 0.01 cM)
+distances <- seq(interval / 1e6, 1, by = interval / 1e6)
+
+file <- "dating_LD_pairs_regular_gen.rds"
+if (file.exists(file)) {
+  pairs <- readRDS(file)
+} else {
+  tstart <- Sys.time()
+
+  pairs <- collect_pairs(sites_grl, distances, recmap = recmap)
+  names(pairs) <- seqlevels(sites_grl)
+  
+  tend <- Sys.time()
+
+  print(tend - tstart)
+  saveRDS(pairs, file)
+}
+```
+
+
+### Compute covariance in all individuals
+
+```{r}
+length_cutoff <- 0
+
+cov_reg_gen_df <- compute_tract_covariances(filter(tracts_gr, length > length_cutoff), sites_grl, pairs)
+```
+
+```{r}
+cov_reg_gen_df %>%
+ggplot() +
+  geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
+  facet_grid(~ sample_age) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
+  xlab("distance [cM]") +
+  theme(legend.position = "bottom", axis.text.x = element_text(hjust = 1, angle = 45))
+```
+
+```{r}
+cov_reg_gen_df %>%
+group_by(sample_age, distance) %>%
+summarise(covariance = mean(covariance)) %>%
+ggplot() +
+  geom_line(aes(distance, covariance, color = factor(sample_age))) +
+  coord_cartesian(xlim = c(0, max(distances))) +
+  xlab("distance [cM]") +
+  theme(legend.position = "bottom", axis.text.x = element_text(hjust = 1, angle = 45))
+```
+
+### Fitting exponential distribution to covariances
+
+<!-- ```{r} -->
+<!-- cov_df <- cov_reg_gen_df -->
+
+<!-- sample_age <- 0e3 -->
+<!-- name <- sample(filter(cov_df, sample_age == !!sample_age)$name, 1) -->
+<!-- chrom <- sample(filter(cov_df, sample_age == !!sample_age)$chrom, 1) -->
+
+<!-- gen_time <- 27 -->
+<!-- r <- 1e-8 -->
+
+<!-- data_df <- filter(cov_df, name == !!name, chrom == !!chrom) #sample_age == !!sample_age) -->
+
+<!-- # nls_res <- nls(covariance ~ exp(-lambda * distance * r) + c, -->
+<!-- #                data = data_df,  start = list(A = 1, lambda = 1/50000, c = 0)) -->
+
+<!-- nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df) -->
+
+<!-- summary(nls_res) -->
+
+<!-- plot(data_df$distance, data_df$covariance) -->
+<!-- y_nls <- predict(nls_res, newdata = data_df[, c("sample_age", "distance")]) %>% as.vector -->
+<!-- lines(data_df$distance, y_nls) -->
+
+<!-- lambda_nls <- unname(exp(coef(nls_res)["lrc"])) -->
+<!-- (t_gens_nls <- lambda_nls * 100) -->
+<!-- (t_nls <- t_gens_nls * gen_time + sample_age) -->
+<!-- ``` -->
+
+```{r}
+fit_reg_gen_df <- fit_exponential(cov_reg_gen_df, distance = "genetic")
+```
+
+```{r}
+sample_age <- 30000
+name <- sample(filter(cov_reg_gen_df, sample_age == !!sample_age)$name, 1)
+
+ind_cov_df <- filter(cov_reg_gen_df, name == !!name)
+ind_fit_df <- filter(fit_reg_gen_df, name == !!name)
+
+ggplot() +
+  geom_line(data = ind_cov_df, aes(distance, covariance)) +
+  geom_line(data = ind_fit_df, aes(distance, covariance), color = "red", linetype = "dashed") +
+  facet_wrap(~ chrom)
+```
+
+```{r}
+fit_reg_gen_df %>%
+ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
+  geom_boxplot() +
+  geom_point() +
+  geom_hline(yintercept = t_admix, linetype = "dashed") +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## Admixture dating using genotype data (tracts)
 
 ### Define archaic ancestry-informative sites
@@ -508,9 +664,10 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
 
 ```{r}
 cov_df <- rbind(
-  mutate(cov_reg_df, method = "regular sites (using tracts)"),
-  mutate(cov_mut_df, method = "natural sites (using tracts)"),
-  mutate(cov_info_df, method = "natural sites (without tracts)")
+  mutate(cov_reg_df, method = "regular sites (using tracts)", dist = "physical"),
+  mutate(cov_reg_gen_df, method = "regular sites (using tracts)", dist = "genetic"),
+  mutate(cov_mut_df, method = "natural sites (using tracts)", dist = "physical"),
+  mutate(cov_info_df, method = "natural sites (without tracts)", dist = "physical")
 ) %>% mutate(method = factor(method, levels = c("regular sites (using tracts)",
                                                 "natural sites (using tracts)",
                                                 "natural sites (without tracts)")))
@@ -518,21 +675,21 @@ cov_df <- rbind(
 
 ```{r}
 cov_df %>%
-group_by(method, sample_age, distance) %>%
+group_by(method, sample_age, distance, dist) %>%
 summarise(covariance = mean(covariance)) %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(method))) +
-  facet_grid(~ sample_age) +
-  coord_cartesian(xlim = c(0, max(distances))) +
+  facet_wrap(dist ~ sample_age, scales = "free_x", nrow = 2) +
   theme(legend.position = "bottom")
 ```
 
 
 ```{r}
 fit_df <- rbind(
-  mutate(fit_reg_df, method = "regular sites (using tracts)"),
-  mutate(fit_mut_df, method = "natural sites (using tracts)"),
-  mutate(fit_info_df, method = "natural sites (without tracts)")
+  mutate(fit_reg_df, method = "regular sites (using tracts)", dist = "physical"),
+  mutate(fit_reg_gen_df, method = "regular sites (using tracts)", dist = "genetic"),
+  mutate(fit_mut_df, method = "natural sites (using tracts)", dist = "physical"),
+  mutate(fit_info_df, method = "natural sites (without tracts)", dist = "physical")
 ) %>% mutate(method = factor(method, levels = c("regular sites (using tracts)",
                                                 "natural sites (using tracts)",
                                                 "natural sites (without tracts)")))
@@ -547,7 +704,7 @@ ggplot(aes(factor(sample_age), t_admix, group = sample_age)) +
   coord_cartesian(ylim = c(0, 100e3)) +
   theme_bw() +
   theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank()) +
-  facet_wrap(~ method)
+  facet_grid(dist ~ method)
 ```
 
 ## Empirical data (using only informative sites)
@@ -737,19 +894,19 @@ sample_age <- sample(unique(fit_emp_df$sample_age), 1)
 name <- sample(filter(fit_emp_df, sample_age == !!sample_age)$name, 1) %>%
   gsub("_hap\\d$", "", .)
 
-ind_cov_df <- filter(cov_emp_df, grepl(paste0(!!name, "_hap"), name)) %>% mutate(name = gsub("_hap\\d", "", name))
-ind_fit_df <- filter(fit_emp_df, grepl(paste0(!!name, "_hap"), name)) %>% mutate(name = gsub("_hap\\d", "", name))
+ind_cov_df <- filter(cov_emp_df, grepl(paste0(!!name, "_hap"), name)) %>%
+  group_by(sample_age, distance) %>%
+  summarise(covariance = mean(covariance), .groups = "keep")
+ind_fit_df <- filter(fit_emp_df, name == !!name)
 
-res_df <- filter(fit_emp_df, grepl(!!name, name)) %>%
-  group_by(hap) %>%
+res_df <- filter(fit_emp_df, name == !!name) %>%
   slice_head(n = 1) %>%
-  select(name, chrom, hap, t_gens_before, t_admix)
+  select(name, t_gens_before, t_admix)
 
 ggplot() +
   geom_line(data = ind_cov_df, aes(distance, covariance)) +
-  geom_line(data = ind_fit_df, aes(distance, covariance), color = "red", linetype = "dashed") +
+  geom_line(data = ind_fit_df, aes(distance, covariance), color = "black", linetype = "dashed") +
   coord_cartesian(ylim = c(0, 0.05)) +
-  facet_wrap(hap ~ chrom) +
   ggtitle(sprintf("Age: %d, t_gens_before: %s, t_admix: %s", 
                   sample_age, paste(round(res_df$t_gens_before, 2), collapse = ", "),
                   paste(round(res_df$t_admix, 2), collapse = ", ")))
@@ -763,35 +920,6 @@ ggplot(aes(sample_age, t_admix, color = sample_age)) +
   coord_cartesian(ylim = c(0, 100e3)) +
   theme_minimal() +
   theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
-```
-
-```{r}
-fit_emp_df %>%
-filter(sample_age == 0) %>%
-ggplot(aes(t_admix)) +
-  geom_density() +
-  geom_vline(xintercept = t_admix, linetype = "dashed") +
-  theme_minimal()
-```
-
-```{r}
-fit_emp_df %>%
-ggplot(aes(t_admix)) +
-  geom_density(aes(color = sample_age, group = sample_age)) +
-  geom_vline(xintercept = t_admix, linetype = "dashed") +
-  theme_minimal()
-```
-
-```{r}
-fit_emp_df %>%
-ggplot(aes(sample_age, t_admix)) +
-  geom_point() +
-  coord_cartesian(ylim = c(0, 100e3)) +
-  geom_hline(yintercept = 55e3, linetype = "dashed") +
-  theme_bw() +
-  labs(x = "average sample age in a group",
-       y = "time of Neanderthal admixture [years ago]") +
-  ggtitle("Inferred Neanderthal admixture time for each age group")
 ```
 
 ## Same as the above but using genetic distances
@@ -842,93 +970,3 @@ if (file.exists(file)) {
   saveRDS(pairs, file)
 }
 ```
-
-```{r}
-cov_emp_gen_df <- compute_match_covariances(info_gt, pairs, metadata) %>%
-  mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
-```
-
-```{r}
-sample_age <- sample(cov_emp_gen_df$sample_age, 1)
-name <- sample(filter(cov_emp_df, sample_age == !!sample_age)$name, 1) %>%
-  gsub("_hap\\d$", "", .)
-
-cov_emp_gen_df %>%
-filter(grepl(!!name, name)) %>%
-ggplot() +
-  geom_line(aes(distance, covariance, color = factor(sample_age), group = interaction(chrom, name))) +
-  facet_grid(~ name) +
-  coord_cartesian(xlim = c(0, max(distances))) +
-  theme(legend.position = "bottom")
-```
-
-### Fitting exponential distribution to covariances
-
-```{r}
-fit_emp_gen_df <- fit_exponential(cov_emp_gen_df, "genetic") %>%
-  mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
-```
-
-```{r}
-sample_age <- sample(unique(fit_emp_gen_df$sample_age), 1)
-name <- sample(filter(fit_emp_gen_df, sample_age == !!sample_age)$name, 1) %>%
-  gsub("_hap\\d$", "", .)
-
-ind_cov_df <- filter(cov_emp_gen_df, grepl(paste0(!!name, "_hap"), name)) %>% mutate(name = gsub("_hap\\d", "", name))
-ind_fit_df <- filter(fit_emp_gen_df, grepl(paste0(!!name, "_hap"), name)) %>% mutate(name = gsub("_hap\\d", "", name))
-
-res_df <- filter(fit_emp_gen_df, grepl(!!name, name)) %>%
-  group_by(hap) %>%
-  slice_head(n = 1) %>%
-  select(name, chrom, hap, t_gens_before, t_admix)
-
-ggplot() +
-  geom_line(data = ind_cov_df, aes(distance, covariance)) +
-  geom_line(data = ind_fit_df, aes(distance, covariance), color = "red", linetype = "dashed") +
-  coord_cartesian(ylim = c(0, 0.05)) +
-  facet_wrap(hap ~ chrom) +
-  ggtitle(sprintf("Age: %d, t_gens_before: %s, t_admix: %s", 
-                  sample_age, paste(round(res_df$t_gens_before, 2), collapse = ", "),
-                  paste(round(res_df$t_admix, 2), collapse = ", ")))
-```
-
-```{r}
-fit_emp_gen_df %>%
-ggplot(aes(sample_age, t_admix, color = sample_age)) +
-  geom_point() +
-  geom_hline(yintercept = t_admix, linetype = "dashed") +
-  coord_cartesian(ylim = c(0, 100e3)) +
-  theme_minimal() +
-  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
-```
-
-```{r}
-fit_emp_df %>%
-filter(sample_age == 0) %>%
-ggplot(aes(t_admix)) +
-  geom_density() +
-  geom_vline(xintercept = t_admix, linetype = "dashed") +
-  theme_minimal()
-```
-
-```{r}
-fit_emp_df %>%
-ggplot(aes(t_admix)) +
-  geom_density(aes(color = sample_age, group = sample_age)) +
-  geom_vline(xintercept = t_admix, linetype = "dashed") +
-  theme_minimal()
-```
-
-```{r}
-fit_emp_df %>%
-ggplot(aes(sample_age, t_admix)) +
-  geom_point() +
-  coord_cartesian(ylim = c(0, 100e3)) +
-  geom_hline(yintercept = 55e3, linetype = "dashed") +
-  theme_bw() +
-  labs(x = "average sample age in a group",
-       y = "time of Neanderthal admixture [years ago]") +
-  ggtitle("Inferred Neanderthal admixture time for each age group")
-```
-
-
