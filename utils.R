@@ -246,7 +246,8 @@ collect_pairs <- function(sites_grl, distances, recmap = NULL, ncores = parallel
     chrom_lengths <- seqlengths(sites_grl)
   } else {
     chrom_lengths <- split(recmap, recmap$chrom) %>% sapply(function(recmap_chr) max(recmap_chr$posg))
-    names(chrom_lengths) <- paste0("chr", names(chrom_lengths))
+    if (is.null(names(chrom_lengths)))
+      names(chrom_lengths) <- paste0("chr", names(chrom_lengths))
   }
 
   chroms <- sapply(sites_grl, function(x) as.character(unique(seqnames(x))))
@@ -363,15 +364,19 @@ compute_match_covariances <- function(info_gt, pairs, metadata) {
 }
 
 fit_exponential <- function(cov_df, distance) {
+  cov_df <- cov_df %>% mutate(name = gsub("_hap\\d", "", name))
+
   distance <- match.arg(distance, choices = c("physical", "genetic"))
 
-  grid_df <- expand_grid(chrom = unique(cov_df$chrom), name = unique(cov_df$name))
+  grid_df <- expand_grid(name = unique(cov_df$name))
 
   fit_df <- lapply(1:nrow(grid_df), function(i) {
     name <- grid_df[i, ]$name
-    chrom <- grid_df[i, ]$chrom
 
-    data_df <- filter(cov_df, name == !!name, chrom == !!chrom)
+    data_df <- filter(cov_df, name == !!name) %>%
+      group_by(name, sample_age, distance) %>%
+      summarise(covariance = mean(covariance), .groups = "keep")
+
     lambda <- tryCatch({
       nls_res <- nls(covariance ~ SSasymp(distance, Asym, R0, lrc), data = data_df)
       exp(coef(nls_res)["lrc"])
@@ -388,10 +393,9 @@ fit_exponential <- function(cov_df, distance) {
 
     tibble(
       name = name,
-      chrom = chrom,
       sample_age = data_df$sample_age[1],
       lambda = lambda,
-      t_gens_before = ifelse(distance == "physical", lambda / 1e-8, lambda),
+      t_gens_before = ifelse(distance == "physical", lambda / 1e-8, lambda * 100),
       t_admix = t_gens_before * gen_time + sample_age,
       fit = list(df)
     )
