@@ -16,8 +16,8 @@ knitr::opts_chunk$set(
 
 set.seed(42)
 
-unlink("dating_LD_files", recursive = TRUE)
-unlink(list.files(".", "dating_LD.*.pdf"), recursive = TRUE)
+# unlink("dating_LD_files", recursive = TRUE)
+# unlink(list.files(".", "dating_LD.*.pdf"), recursive = TRUE)
 ```
 
 ```{r}
@@ -922,40 +922,93 @@ ggplot(aes(sample_age, t_admix, color = sample_age)) +
   theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
 ```
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## Same as the above but using genetic distances
 
 ```{r}
-recmap <- read_recmap("~/Downloads/plink")
+recmap <- suppressMessages(read_recmap("~/Downloads/plink"))
+recmap
+```
 
-tracts_df <- convert_genetic(recmap, tracts_df, cols = c("left", "right"))
-tracts_df$length_gen <- tracts_df$right_gen - tracts_df$left_gen
+### Read inferred ancestry tracts
 
-tracts_df
+```{r}
+metadata <- read_metadata() %>% mutate(sample_age = ageAverage, name = sampleId)
+tracts_df <- rbind(read_tracts("Modern"), read_tracts("Ancient"))
+
+tracts_df <- select(metadata, name = sampleId, sample_age = ageAverage, coverage) %>%
+  inner_join(tracts_df, by = c("name" = "ID")) %>%
+  dplyr::rename(left = start, right = end)
 ```
 
 ```{r}
-info_gt <- fread("info_gt_chr1.tsv.gz")
+tracts_gr <- tracts_df %>%
+  makeGRangesFromDataFrame(
+    start.field = "left",
+    end.field = "right",
+    keep.extra.columns = TRUE,
+    ignore.strand = TRUE,
+    starts.in.df.are.0based = TRUE
+  )
+```
+
+```{r}
+seqlengths(tracts_gr) <- seqlengths(BSgenome.Hsapiens.UCSC.hg19)[names(seqlengths(tracts_gr))]
+genome(tracts_gr) <- "hg19"
+```
+
+### Read genotypes at informative sites
+
+```{r}
+info_gt <- fread("data/info_gt.tsv.gz")
 
 gt_samples <- unique(gsub("_hap\\d$", "", colnames(info_gt)))
 meta_samples <- metadata$sampleId
 both_samples <- intersect(meta_samples, gt_samples)
 info_gt <- info_gt[, .SD, .SDcols = c("chrom", "pos", paste0(both_samples, "_hap1"), paste0(both_samples, "_hap2"), "NEA_1")]
 
-sites_gr <- makeGRangesFromDataFrame(info_gt[, .(chrom, pos)], start.field = "pos", end.field = "pos")
-mcols(sites_gr)$index <- 1:nrow(info_gt)
-```
-
-```{r}
-sites_grl <- GRangesList(list(sites_gr))
+sites_grl <- lapply(paste0("chr", 1:22),
+                    function(chr) {
+                      dt <- info_gt[chrom == chr]
+                      gr <- makeGRangesFromDataFrame(dt, start.field = "pos", end.field = "pos")
+                      mcols(gr)$index <- 1:nrow(dt)
+                      gr
+                    }) %>% GRangesList
 seqlevels(sites_grl) <- seqlevels(tracts_gr)
 seqlengths(sites_grl) <- seqlengths(tracts_gr)
 ```
 
 ```{r}
-interval <- 0.01
-distances <- seq(interval, 1, by = interval)
+interval <- 10e3
 
-file <- "dating_LD_pairs_emp_gendist.rds"
+# compute distance bins in cM (in steps corresponding to 10 kb ~ 0.01 cM)
+distances <- seq(interval / 1e6, 1, by = interval / 1e6)
+
+file <- "dating_LD_pairs_emp_gen.rds"
 if (file.exists(file)) {
   pairs <- readRDS(file)
 } else {
@@ -966,7 +1019,151 @@ if (file.exists(file)) {
   
   tend <- Sys.time()
 
-  print(tend - tstart)
+  print(tend - tstart) # Time difference of 1.77017 hours (all chromosomes)
   saveRDS(pairs, file)
 }
+```
+
+```{r}
+cov_emp_df <- compute_match_covariances(info_gt, pairs, metadata) %>%
+  mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
+```
+
+```{r}
+cov_emp_df$age_group <- cut(
+  cov_emp_df$sample_age,
+  breaks = c(Inf, 20e3, 10e3, 5e3, 100, 0),
+)
+
+group_levels <- levels(cov_emp_df$age_group)
+
+cov_emp_df <- cov_emp_df %>%
+  mutate(
+    age_group = as.character(age_group),
+    age_group = ifelse(is.na(age_group), "present-day", age_group),
+    age_group = factor(age_group, levels = c("present-day", group_levels))
+  )
+
+cov_emp_df %>%
+  group_by(age_group, distance) %>%
+  summarise(covariance = mean(covariance)) %>%
+ggplot() +
+  geom_line(aes(distance, covariance, color = age_group)) +
+  theme(legend.position = "bottom")
+```
+
+
+### Plot results for one single individual
+
+```{r}
+sample_age <- sample(cov_emp_df$sample_age, 1)
+name <- sample(filter(cov_emp_df, sample_age == !!sample_age)$name, 1) %>%
+  gsub("_hap\\d$", "", .)
+
+p1 <- cov_emp_df %>%
+filter(grepl(!!name, name)) %>%
+ggplot() +
+  geom_line(aes(distance, covariance, color = factor(interaction(name, chrom)))) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
+  guides(color = "none") +
+  theme(legend.position = "bottom") +
+  ggtitle(paste0(name, ", ", sample_age, "kya"))
+
+p2 <- cov_emp_df %>%
+  filter(grepl(!!name, name)) %>%
+  group_by(distance) %>%
+  summarise(covariance = mean(covariance)) %>%
+ggplot() +
+  geom_line(aes(distance, covariance)) +
+  coord_cartesian(xlim = c(0, max(distances)), ylim = c(0, 0.1)) +
+  guides(color = "none") +
+  theme(legend.position = "bottom")
+
+cowplot::plot_grid(p1, p2, nrow = 1)
+```
+
+```{r}
+sites_gr <- sites_grl %>% unlist
+ind_tracts_gr <- tracts_gr %>% filter(name == !!name)
+ind_sites_gr <- sites_gr
+
+# mark sites falling within an introgressed tract
+tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
+mcols(ind_sites_gr)$tract_match <- FALSE
+mcols(ind_sites_gr[tract_overlaps])$tract_match <- TRUE
+mcols(ind_sites_gr)$tract_match <- as.integer(mcols(ind_sites_gr)$tract_match)
+
+# data.table is stupid:
+matches_dt <-
+  info_gt[, .(hap1_match = as.integer(get(paste0(name, "_hap1")) == NEA_1),
+              hap2_match = as.integer(get(paste0(name, "_hap2")) == NEA_1))]
+mcols(ind_sites_gr)$hap1_match <- matches_dt$hap1_match
+mcols(ind_sites_gr)$hap2_match <- matches_dt$hap2_match
+    
+pdf(paste0(name, ".pdf"), width = 10, height = 6)
+
+chroms <- paste0("chr", 1:22)
+for (chrom in chroms) {
+  chrom_ind_tracts_gr <- filter(ind_tracts_gr, seqnames == chrom)
+  chrom_ind_sites_gr <- filter(ind_sites_gr, seqnames == chrom)
+
+p <- ggplot() +
+  geom_rect(data = as.data.frame(chrom_ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
+  geom_point(data = as.data.frame(filter(chrom_ind_sites_gr, tract_match == 1)), aes(x = start, y = 0.05), size = 0.1, color = "darkgreen") +
+  geom_point(data = as.data.frame(filter(chrom_ind_sites_gr, hap1_match == 1)), aes(x = start, y = 0.03), size = 0.1, color = "orange") +
+  geom_point(data = as.data.frame(filter(chrom_ind_sites_gr, hap2_match == 1)), aes(x = start, y = 0.01), size = 0.1, color = "maroon") +
+  geom_point(data = as.data.frame(chrom_ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
+  scale_x_continuous(labels = scales::comma) +
+  expand_limits(x = 0) +
+  theme_minimal() +
+  theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank()) +
+  facet_wrap(~seqnames)
+
+print(p)
+
+}
+
+dev.off()
+
+ind_sites_gr %>% filter(tract_match == 1) %>% summarise(hap_matches = mean(hap1_match | hap2_match))
+```
+
+### Fitting exponential distribution to covariances
+
+```{r}
+fit_emp_df <- fit_exponential(cov_emp_df, distance = "physical") %>%
+  mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
+```
+
+```{r}
+sample_age <- sample(unique(fit_emp_df$sample_age), 1)
+name <- sample(filter(fit_emp_df, sample_age == !!sample_age)$name, 1) %>%
+  gsub("_hap\\d$", "", .)
+
+ind_cov_df <- filter(cov_emp_df, grepl(paste0(!!name, "_hap"), name)) %>%
+  group_by(sample_age, distance) %>%
+  summarise(covariance = mean(covariance), .groups = "keep")
+ind_fit_df <- filter(fit_emp_df, name == !!name)
+
+res_df <- filter(fit_emp_df, name == !!name) %>%
+  slice_head(n = 1) %>%
+  select(name, t_gens_before, t_admix)
+
+ggplot() +
+  geom_line(data = ind_cov_df, aes(distance, covariance)) +
+  geom_line(data = ind_fit_df, aes(distance, covariance), color = "black", linetype = "dashed") +
+  coord_cartesian(ylim = c(0, 0.05)) +
+  ggtitle(sprintf("Age: %d, t_gens_before: %s, t_admix: %s", 
+                  sample_age, paste(round(res_df$t_gens_before, 2), collapse = ", "),
+                  paste(round(res_df$t_admix, 2), collapse = ", ")))
+```
+
+```{r}
+fit_emp_df %>%
+ggplot(aes(sample_age, t_admix, color = sample_age)) +
+  geom_point() +
+  geom_hline(yintercept = t_admix, linetype = "dashed") +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
 ```
