@@ -844,7 +844,8 @@ ind_sites_gr <- sites_gr
 # mark sites falling within an introgressed tract
 tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
 mcols(ind_sites_gr)$tract_match <- FALSE
-mcols(ind_sites_gr[tract_overlaps])$tract_match <- TRUE
+if (length(tract_overlaps))
+  mcols(ind_sites_gr[tract_overlaps])$tract_match <- TRUE
 mcols(ind_sites_gr)$tract_match <- as.integer(mcols(ind_sites_gr)$tract_match)
 
 # data.table is stupid:
@@ -1025,26 +1026,26 @@ if (file.exists(file)) {
 ```
 
 ```{r}
-cov_emp_df <- compute_match_covariances(info_gt, pairs, metadata) %>%
+cov_emp_gen_df <- compute_match_covariances(info_gt, pairs, metadata) %>%
   mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
 ```
 
 ```{r}
-cov_emp_df$age_group <- cut(
-  cov_emp_df$sample_age,
+cov_emp_gen_df$age_group <- cut(
+  cov_emp_gen_df$sample_age,
   breaks = c(Inf, 20e3, 10e3, 5e3, 100, 0),
 )
 
-group_levels <- levels(cov_emp_df$age_group)
+group_levels <- levels(cov_emp_gen_df$age_group)
 
-cov_emp_df <- cov_emp_df %>%
+cov_emp_gen_df <- cov_emp_gen_df %>%
   mutate(
     age_group = as.character(age_group),
     age_group = ifelse(is.na(age_group), "present-day", age_group),
     age_group = factor(age_group, levels = c("present-day", group_levels))
   )
 
-cov_emp_df %>%
+cov_emp_gen_df %>%
   group_by(age_group, distance) %>%
   summarise(covariance = mean(covariance)) %>%
 ggplot() +
@@ -1056,11 +1057,11 @@ ggplot() +
 ### Plot results for one single individual
 
 ```{r}
-sample_age <- sample(cov_emp_df$sample_age, 1)
-name <- sample(filter(cov_emp_df, sample_age == !!sample_age)$name, 1) %>%
+sample_age <- sample(cov_emp_gen_df$sample_age, 1)
+name <- sample(filter(cov_emp_gen_df, sample_age == !!sample_age)$name, 1) %>%
   gsub("_hap\\d$", "", .)
 
-p1 <- cov_emp_df %>%
+p1 <- cov_emp_gen_df %>%
 filter(grepl(!!name, name)) %>%
 ggplot() +
   geom_line(aes(distance, covariance, color = factor(interaction(name, chrom)))) +
@@ -1069,7 +1070,7 @@ ggplot() +
   theme(legend.position = "bottom") +
   ggtitle(paste0(name, ", ", sample_age, "kya"))
 
-p2 <- cov_emp_df %>%
+p2 <- cov_emp_gen_df %>%
   filter(grepl(!!name, name)) %>%
   group_by(distance) %>%
   summarise(covariance = mean(covariance)) %>%
@@ -1082,70 +1083,24 @@ ggplot() +
 cowplot::plot_grid(p1, p2, nrow = 1)
 ```
 
-```{r}
-sites_gr <- sites_grl %>% unlist
-ind_tracts_gr <- tracts_gr %>% filter(name == !!name)
-ind_sites_gr <- sites_gr
-
-# mark sites falling within an introgressed tract
-tract_overlaps <- queryHits(findOverlaps(ind_sites_gr, ind_tracts_gr))
-mcols(ind_sites_gr)$tract_match <- FALSE
-mcols(ind_sites_gr[tract_overlaps])$tract_match <- TRUE
-mcols(ind_sites_gr)$tract_match <- as.integer(mcols(ind_sites_gr)$tract_match)
-
-# data.table is stupid:
-matches_dt <-
-  info_gt[, .(hap1_match = as.integer(get(paste0(name, "_hap1")) == NEA_1),
-              hap2_match = as.integer(get(paste0(name, "_hap2")) == NEA_1))]
-mcols(ind_sites_gr)$hap1_match <- matches_dt$hap1_match
-mcols(ind_sites_gr)$hap2_match <- matches_dt$hap2_match
-    
-pdf(paste0(name, ".pdf"), width = 10, height = 6)
-
-chroms <- paste0("chr", 1:22)
-for (chrom in chroms) {
-  chrom_ind_tracts_gr <- filter(ind_tracts_gr, seqnames == chrom)
-  chrom_ind_sites_gr <- filter(ind_sites_gr, seqnames == chrom)
-
-p <- ggplot() +
-  geom_rect(data = as.data.frame(chrom_ind_tracts_gr), aes(xmin = start, xmax = end, ymin = 0.1, ymax = 1.5), fill = "blue") +
-  geom_point(data = as.data.frame(filter(chrom_ind_sites_gr, tract_match == 1)), aes(x = start, y = 0.05), size = 0.1, color = "darkgreen") +
-  geom_point(data = as.data.frame(filter(chrom_ind_sites_gr, hap1_match == 1)), aes(x = start, y = 0.03), size = 0.1, color = "orange") +
-  geom_point(data = as.data.frame(filter(chrom_ind_sites_gr, hap2_match == 1)), aes(x = start, y = 0.01), size = 0.1, color = "maroon") +
-  geom_point(data = as.data.frame(chrom_ind_sites_gr), aes(x = start, y = 0), size = 0.1, alpha = 0.05) +
-  scale_x_continuous(labels = scales::comma) +
-  expand_limits(x = 0) +
-  theme_minimal() +
-  theme(axis.text.y = element_blank(), axis.title.y = element_blank(), axis.ticks.y = element_blank(), panel.grid = element_blank()) +
-  facet_wrap(~seqnames)
-
-print(p)
-
-}
-
-dev.off()
-
-ind_sites_gr %>% filter(tract_match == 1) %>% summarise(hap_matches = mean(hap1_match | hap2_match))
-```
-
 ### Fitting exponential distribution to covariances
 
 ```{r}
-fit_emp_df <- fit_exponential(cov_emp_df, distance = "physical") %>%
+fit_emp_gen_df <- fit_exponential(cov_emp_gen_df, distance = "genetic") %>%
   mutate(hap = gsub(".*_hap(\\d)", "\\1", name))
 ```
 
 ```{r}
-sample_age <- sample(unique(fit_emp_df$sample_age), 1)
-name <- sample(filter(fit_emp_df, sample_age == !!sample_age)$name, 1) %>%
+sample_age <- sample(unique(fit_emp_gen_df$sample_age), 1)
+name <- sample(filter(fit_emp_gen_df, sample_age == !!sample_age)$name, 1) %>%
   gsub("_hap\\d$", "", .)
 
-ind_cov_df <- filter(cov_emp_df, grepl(paste0(!!name, "_hap"), name)) %>%
+ind_cov_df <- filter(cov_emp_gen_df, grepl(paste0(!!name, "_hap"), name)) %>%
   group_by(sample_age, distance) %>%
   summarise(covariance = mean(covariance), .groups = "keep")
-ind_fit_df <- filter(fit_emp_df, name == !!name)
+ind_fit_df <- filter(fit_emp_gen_df, name == !!name)
 
-res_df <- filter(fit_emp_df, name == !!name) %>%
+res_df <- filter(fit_emp_gen_df, name == !!name) %>%
   slice_head(n = 1) %>%
   select(name, t_gens_before, t_admix)
 
@@ -1159,7 +1114,7 @@ ggplot() +
 ```
 
 ```{r}
-fit_emp_df %>%
+fit_emp_gen_df %>%
 ggplot(aes(sample_age, t_admix, color = sample_age)) +
   geom_point() +
   geom_hline(yintercept = t_admix, linetype = "dashed") +
