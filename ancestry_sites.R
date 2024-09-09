@@ -2,6 +2,7 @@
 
 library(data.table)
 library(dtplyr)
+library(magrittr)
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 1) stop("Incorrect arguments", call. = FALSE)
@@ -23,7 +24,7 @@ metadata <- fread("data/neo.impute.1000g.sampleInfo_clusterInfo.txt")
 
 afr <- metadata[popId == "YRI", sampleId]
 neand <- "AltaiNeandertal"
-afr_neand_gt <- gt[, .SD, , .SDcols = c("chrom", "pos", "ref", "alt", afr, neand)]
+afr_neand_gt <- gt[, .SD, , .SDcols = c("chrom", "pos", "ref", "alt", "AA", afr, neand)]
 
 check_genotypes(afr_neand_gt)
 
@@ -41,10 +42,11 @@ afr_neand_gt[, (c(afr, neand)) := lapply(.SD, function(x) { fcase(x %in% c("0|0"
 check_genotypes(afr_neand_gt)
 
 # filter for African-Neanderthal fixed differences
-afr_freq <- afr_neand_gt[, rowMeans(.SD), .SDcols = afr]
-neand_freq <- afr_neand_gt[, rowMeans(.SD), .SDcols = neand]
-fixed_sites <- abs(afr_freq - neand_freq) == 1
-
+# (Africans = fixed ancestral, Neanderthals = fixed derived)
+ancestral <- afr_neand_gt$AA
+afr_anc <- rowMeans(afr_neand_gt[, lapply(.SD, function(x) x == ancestral), .SDcols = afr]) == 1
+neand_der <- rowMeans(afr_neand_gt[, lapply(.SD, function(x) x != ancestral), .SDcols = neand]) == 1
+fixed_sites <- afr_anc & neand_der
 
 # select genotypes at fixed African-Neanderthal differences in Eurasians
 info_gt <- gt[fixed_sites, .SD, .SDcols = !c(afr, neand)][, .SD, .SDcols = !patterns("_rnd")]
@@ -60,20 +62,20 @@ check_genotypes(info_gt)
 
 # get all samples to use for further processing
 ancient_samples <- metadata[dataSource == "thisStudy", sampleId]
-modern_samples <- metadata[dataSource == "1000g" & popId == "GBR", sampleId]
+modern_samples <- metadata[dataSource == "1000g", sampleId]
 samples <- intersect(colnames(info_gt), c(ancient_samples, modern_samples))
 #samples <- setdiff(names(info_gt), c("chrom", "pos", "ref", "alt"))
-info_gt <- info_gt[, .SD, .SDcols = c("chrom", "pos", samples)]
+info_gt <- info_gt[, .SD, .SDcols = c("chrom", "pos", "AA", samples)]
 
-# split diploid genotypes into haploid phased chromosome genotypes
+# split diploid genotypes into haploid phased chromosome genotypes and define
+# genotype states as "an allele here is Neanderthal-like"
+neand_gt <- afr_neand_gt$AltaiNeandertal[fixed_sites] %>% { .[!is.na(.)] }
 for (i in seq_along(samples)) {
   ind <- samples[i]
-  info_gt[, paste0(ind, "_hap1") := as.integer(sub("\\|.*", "", get(ind)))]
-  info_gt[, paste0(ind, "_hap2") := as.integer(sub(".*\\|", "", get(ind)))]
+  info_gt[, paste0(ind, "_hap1") := as.integer(neand_gt == sub("\\|.*", "", get(ind)))]
+  info_gt[, paste0(ind, "_hap2") := as.integer(neand_gt == sub(".*\\|", "", get(ind)))]
   info_gt[, (ind) := NULL]
 }
-neand_gt <- afr_neand_gt$AltaiNeandertal[fixed_sites]
-neand_gt <- neand_gt[!is.na(neand_gt)]
 info_gt[, NEA_1 := neand_gt]
 
 fwrite(info_gt, file.path(dirname(filename), paste0("info_", basename(filename), ".gz")), sep = "\t")
