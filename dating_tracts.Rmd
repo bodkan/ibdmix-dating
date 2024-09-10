@@ -921,6 +921,121 @@ inner_join(
 ```
 
 ```{r}
+results_v2_gen_df %>%
+filter(min_length == 0.05) %>%
+ggplot(aes(factor(sample_age), t_inferred, group = 1)) +
+  geom_line() +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  geom_hline(yintercept = 55e3, linetype = "dashed") +
+  theme_bw() +
+  labs(x = "average sample age in a group",
+       y = "time of Neanderthal admixture [years ago]") +
+  ggtitle("Inferred Neanderthal admixture time for each age group")
+```
+
+
+
+
+## Estimating admixture time from tract lengths v2 (genetic distance)
+
+```{r}
+recmap <- suppressMessages(read_recmap("~/Downloads/plink"))
+recmap
+```
+
+```{r}
+min_length <- 50e3 / 1e6
+
+# pdf("dating_tracts_empirical_v2_gendist.pdf", width = 12, height = 8)
+
+results_v2_gen <- list()
+
+max_length <- Inf
+
+# for (min_length in c(50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
+  tracts_filt_df <- tracts_df %>%
+    convert_genetic(recmap, ., cols = c("start", "end")) %>%
+    mutate(length_gen = end_gen - start_gen) %>%
+    filter(length_gen >= min_length, length <= max_length)
+
+  p_tracts <-
+    ggplot() +
+    # geom_histogram(
+    #   data = tracts_filt_df, aes(x = length_gen, y = after_stat(density), fill = as.factor(sample_age)),
+    #   binwidth = 0.1, alpha = 0.75) +
+    geom_density(
+      data = tracts_filt_df, aes(x = length_gen, y = after_stat(density), fill = as.factor(sample_age)),
+      alpha = 0.75, color = FALSE) +
+    labs(
+      x = "tract length [bp]", y = "density", fill = "age of sample",
+      title = "Tract length distribution as a function of admixed sample's age",
+      subtitle = paste0(
+        "(assuming single-pulse admixture at ~ 55 kya, tract length [",
+        as.integer(min_length / 1e3), " kb, ", max_length / 1e6," Mb])"
+      )
+    ) +
+    scale_x_continuous(labels = scales::comma) +
+    # expand_limits(y = 0, x = 0) +
+    # coord_cartesian(xlim = c(0, 2e6), ylim = c(0, 2e-5)) +
+    theme_minimal() +
+    theme(legend.position = "none", text = element_text(size = 15),
+          axis.text.x = element_text(hjust = 1, angle = 45)) +
+    facet_wrap(~ sample_age, nrow = 2,
+               labeller = labeller(sample_age = function(x) paste("sample age =", x, ifelse(x != "present-day", "kya", "")))); p_tracts
+  
+  exp_df <- group_by(tracts_filt_df, sample_age) %>%
+    summarise(L = mean(length_gen), ageAverage = as.integer(mean(unique(ageAverage)))) %>%
+    mutate(
+      lambda = 1 / (L - min_length / 1e6),
+      t_gen = lambda * 100,
+      t_before = t_gen * gen_time,
+      t_inferred = t_before + ageAverage
+    )
+  
+  exp_decay <- function(lambda, max) {
+    data.frame(length_gen = seq(0, max, by = 0.01)) %>%
+      mutate(density = dexp(length_gen, rate = lambda))
+  }
+  
+  predictions_df <-
+    exp_df %>%
+    select(sample_age, lambda) %>%
+    rowwise() %>%
+    mutate(exp_data = list(exp_decay(lambda, max(tracts_filt_df$length_gen)))) %>%
+    unnest(cols = c(exp_data)) %>%
+    select(-lambda)
+  
+  p_fit <- p_tracts +
+    geom_line(data = predictions_df, aes(x = length_gen + min_length / 1e6, y = density),
+              linetype = "dashed", linewidth = 0.75, color = "black") +
+    geom_text(data = exp_df,
+              aes(x = Inf, y = Inf, color = as.factor(sample_age),
+                  label = paste0(
+                    "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+                    "(", round(t_gen), " generations prior)"
+                  )),
+              hjust = 1.1, vjust = 2, size = 4); print(p_fit)
+  
+  results_v2_gen[[length(results_v2_gen) + 1]] <- exp_df %>% mutate(min_length = as.integer(min_length) / 1e6)
+}
+
+dev.off()
+
+results_v2_gen_df <- do.call(rbind, results_v2_gen)
+```
+
+```{r}
+inner_join(
+  filter(results_df, method == "MLE") %>% select(sample_age, min_length, t_inferred),
+  select(results_v2_df, sample_age = ageAverage, min_length, t_inferred) %>% filter(min_length == 50e3),
+  by = c("sample_age", "min_length")
+) %>%
+  mutate(equal = t_inferred.x == t_inferred.y) %>%
+  .$equal %>%
+  all()
+```
+
+```{r}
 results_df %>%
 filter(min_length == 50e3) %>%
 ggplot(aes(factor(sample_age), t_inferred, color = method, group = method)) +
@@ -932,6 +1047,8 @@ ggplot(aes(factor(sample_age), t_inferred, color = method, group = method)) +
        y = "time of Neanderthal admixture [years ago]") +
   ggtitle("Inferred Neanderthal admixture time for each age group")
 ```
+
+
 
 
 ## Fitting exponential decay of truncated distributions
@@ -1084,6 +1201,3 @@ ggplot(tracts_df) +
   geom_hline(yintercept = c(50e3, 250e3), linetype = "dashed") +
   coord_cartesian(ylim = c(50e3, 250e3)) 
 ```
-
-## More elaborate LD covariance analysis
-
