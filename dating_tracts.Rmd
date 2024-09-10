@@ -625,6 +625,8 @@ ggplot(tracts_df) +
   theme(legend.position = "bottom")
 ```
 
+### v1 estimate
+
 ```{r}
 # sample_age <- "present-day"
 # min_length <- 50e3
@@ -827,7 +829,7 @@ cowplot::plot_grid(p_time, p_time2, nrow = 2)
 
 
 
-## Estimating admixture time from tract lengths v2
+### v2 estimate
 
 ```{r}
 # min_length <- 50e3
@@ -908,6 +910,8 @@ dev.off()
 
 results_v2_df <- do.call(rbind, results_v2)
 ```
+
+### v1 vs v2 comparison
 
 ```{r}
 inner_join(
