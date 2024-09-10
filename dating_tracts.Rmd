@@ -55,7 +55,7 @@ model <- compile_model(
 
 samples <- rbind(
   schedule_sampling(model, times = 50e3, list(nea, 2)),
-  schedule_sampling(model, times = c(50, 40, 30, 20, 10, 0) * 1e3, list(eur, 10)),
+  schedule_sampling(model, times = c(50, 40, 30, 20, 10, 0) * 1e3, list(eur, 50)),
   schedule_sampling(model, times = 0, list(afr, 100))
 )
 
@@ -91,7 +91,7 @@ head(tracts_df)
 ## How does admixture dating work?
 
 ```{r, echo=FALSE}
-h_ind <- tracts_df %>% filter(sample_age == 10000) %>% filter(name %in% c("EUR_41", "EUR_42", "EUR_43")) %>% .$length %>% hist(breaks = 50, plot = FALSE)
+h_ind <- tracts_df %>% filter(sample_age == 10000) %>% .$length %>% hist(breaks = 50, plot = FALSE)
 plot(as.integer(h_ind$mids), h_ind$counts, main = "Distribution of tract lengths in a 10 ky old individual",
      xlab = "tract length bin [bp]", ylab = "count",
      xlim = c(0, max(h_ind$mids)), ylim = c(0, max(h_ind$counts)))
@@ -132,7 +132,7 @@ $$
 and overlay an exponential function over the histogram using `dexp(..., rate = <lambda>)` in R:
 
 ```{r, echo=FALSE}
-tract_lengths <- tracts_df %>% filter(sample_age == 10000) %>% filter(name %in% c("EUR_41", "EUR_42", "EUR_43")) %>% .$length
+tract_lengths <- tracts_df %>% filter(sample_age == 10000) %>% .$length
 h_ind <- tract_lengths %>% hist(breaks = 50, plot = FALSE)
 plot(as.integer(h_ind$mids), h_ind$counts, main = "Distribution of tract lengths in a 10 ky old individual",
      xlab = "tract length bin [bp]", ylab = "count",
@@ -248,7 +248,7 @@ results <- list()
 
 pdf("dating_tracts_sims.pdf", width = 14, height = 8)
 
-for (min_length in c(0, 50e3, 100e3)) {
+for (min_length in c(0, 25e3, 50e3)) {
 
   plot(1, type = "n", axes = FALSE, xlab = "", ylab = "", xlim = c(0, 1), ylim = c(0, 1))
   text(0.5, 0.5, paste("Minimum tract length:", as.integer(min_length), "bp"), cex = 3)
