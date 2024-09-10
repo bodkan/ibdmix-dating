@@ -235,8 +235,9 @@ ggplot() +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
 ```
 
+## Admixture dating in simulated data
 
-## Estimating admixture time from tract lengths
+### v1 estimate
 
 ```{r}
 # sample_age <- 0
@@ -449,7 +450,7 @@ cowplot::plot_grid(p_density2, p_time2, nrow = 2)
 
 
 
-## Estimating admixture time from tract lengths v2
+### v2 estimate
 
 ```{r}
 # min_length <- 0
@@ -552,6 +553,111 @@ inner_join(
 
 
 
+### v3 estimate
+
+```{r}
+min_length <- 0e3
+
+results_v3 <- list()
+
+max_length <- Inf
+
+all_inds <- tracts_df %>% filter(sample_age < 20e3) %>%arrange(-sample_age) %>% pull(name) %>% unique
+
+pdf("dating_tracts_sim_inds.pdf", width = 12, height = 8)
+
+for (i in seq_along(all_inds)) {
+  ind <- all_inds[i]
+  cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
+
+  ind_tracts_df <- filter(tracts_df, length >= min_length, name == ind)
+  sample_age <- ind_tracts_df$sample_age[1]
+
+  p_tracts <-
+    ggplot() +
+    geom_histogram(
+      data = ind_tracts_df, aes(x = length, y = after_stat(density)),
+      binwidth = 10000, alpha = 0.75) +
+    # geom_density(
+    #   data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    #   bw = 5000, alpha = 0.75, color = FALSE) +
+    labs(
+      x = "tract length [bp]", y = "density", fill = "age of sample",
+      title = "Distribution of introgressed tracts",
+      subtitle = paste0("name: ", ind, ", date: ", sample_age," years BP")
+    ) +
+    scale_x_continuous(labels = scales::comma) +
+    expand_limits(y = 0, x = 0) +
+    coord_cartesian(xlim = c(0, 2e6), ylim = c(0, 2e-5)) +
+    theme_minimal() +
+    theme(legend.position = "none", text = element_text(size = 15),
+          axis.text.x = element_text(hjust = 1, angle = 45))
+  
+  bin_data <- hist(ind_tracts_df$length, plot = FALSE, breaks = 100)
+  density <- bin_data$density
+  length <- bin_data$mids[density > 0]
+  density <- density[density > 0]
+
+  r <- 1e-8
+  m <- 0.03
+
+  # nls estimate -- computing the rate of decay (lambda) by fitting an exponential curve directly
+  # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp 
+  nls_res <- tryCatch(
+    nls(density ~ SSasymp(length, Asym, R0, lrc)),
+    error = function(e) NA, warning = function(w) NA
+  )
+  failed_nls <- !inherits(nls_res, "nls")
+  lambda_nls <- if (failed_nls) NA else exp(unname(coef(nls_res)["lrc"]))
+  t_gens_before <- lambda_nls / r
+  t_inferred <- t_gens_before * gen_time + sample_age
+  
+  x_values <- sort(unique(c(length, seq(0, max(ind_tracts_df$length), by = 5000))))
+  y_nls <- if (failed_nls) NA else predict(nls_res, newdata = data.frame(length = x_values + min_length))
+  predictions_df <- tibble(length = x_values, density = y_nls)
+
+  ind_df <- tibble(name = ind, sample_age = sample_age, t_inferred = t_inferred, min_length = min_length)
+
+  p_fit <- p_tracts +
+    geom_line(data = predictions_df, aes(x = length + min_length, y = density),
+              linetype = "dashed", linewidth = 0.75, color = "black") +
+    geom_text(data = ind_df,
+              aes(x = Inf, y = Inf,
+                  label = paste0(
+                    "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+                    "(", round(t_gens_before), " generations prior)"
+                  )),
+              hjust = 1.1, vjust = 2, size = 4)
+  
+  print(p_fit)
+
+  results_v3[[length(results_v3) + 1]] <- ind_df
+}
+
+dev.off()
+
+results_v3_df <- do.call(rbind, results_v3)
+```
+
+```{r}
+x_df <- inner_join(results_v3_df, metadata, by = c("name" = "sampleId", "sample_age" = "ageAverage")) %>%
+  mutate(cluster = case_when(t_inferred < 48000 ~ "x", t_inferred > 52000 ~ "y", TRUE ~ "z"))
+
+{ x_df %>%
+  ggplot() +
+  geom_point(aes(sample_age, t_inferred, color = cluster)) +
+  coord_cartesian(ylim = c(0, 100e3)) } %>%
+  ggplotly()
+```
+
+
+
+
+
+
+
+
+
 
 ## Admixture dating in empirical data
 
@@ -630,6 +736,21 @@ ggplot() +
   theme_bw() +
   theme(legend.position = "none", text = element_text(size = 15)) +
   facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age:", x)))
+```
+
+```{r}
+pdf("dating_tracts_inds.pdf")
+for (ind in tracts_df %>% arrange(-ageAverage) %>% pull(sampleId) %>% unique) {
+  {
+    filter(tracts_df, sampleId == ind) %>%
+    ggplot() +
+    geom_density(aes(length)) +
+    coord_cartesian(xlim = c(0, 2e6), ylim = c(0, 2e-5)) +
+    ggtitle(paste0(ind, ", ", filter(metadata, sampleId == ind)$ageAverage, " years old"))
+  } %>%
+    print()
+}
+dev.off()
 ```
 
 ```{r}
@@ -940,6 +1061,116 @@ dev.off()
 
 results_v2_df <- do.call(rbind, results_v2)
 ```
+
+
+
+
+
+
+
+
+
+
+
+### v3 estimate
+
+```{r}
+min_length <- 50e3
+
+results_v3 <- list()
+
+max_length <- Inf
+
+all_inds <- tracts_df %>% arrange(-ageAverage) %>% pull(sampleId) %>% unique
+
+pdf("dating_tracts_empirical_inds.pdf", width = 12, height = 8)
+
+for (i in seq_along(all_inds)) {
+  ind <- all_inds[i]
+  cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
+
+  ind_tracts_df <- filter(tracts_df, length >= min_length, sampleId == ind)
+  sample_age <- ind_tracts_df$ageAverage[1]
+
+  p_tracts <-
+    ggplot() +
+    geom_histogram(
+      data = ind_tracts_df, aes(x = length, y = after_stat(density)),
+      binwidth = 10000, alpha = 0.75) +
+    # geom_density(
+    #   data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    #   bw = 5000, alpha = 0.75, color = FALSE) +
+    labs(
+      x = "tract length [bp]", y = "density", fill = "age of sample",
+      title = "Distribution of introgressed tracts",
+      subtitle = paste0("name: ", ind, ", date: ", sample_age," years BP")
+    ) +
+    scale_x_continuous(labels = scales::comma) +
+    expand_limits(y = 0, x = 0) +
+    coord_cartesian(xlim = c(0, 2e6), ylim = c(0, 2e-5)) +
+    theme_minimal() +
+    theme(legend.position = "none", text = element_text(size = 15),
+          axis.text.x = element_text(hjust = 1, angle = 45))
+  
+  bin_data <- hist(ind_tracts_df$length, plot = FALSE, breaks = 100)
+  density <- bin_data$density
+  length <- bin_data$mids[density > 0]
+  density <- density[density > 0]
+
+  r <- 1e-8
+  m <- 0.03
+
+  # nls estimate -- computing the rate of decay (lambda) by fitting an exponential curve directly
+  # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp 
+  nls_res <- tryCatch(
+    nls(density ~ SSasymp(length, Asym, R0, lrc)),
+    error = function(e) NA, warning = function(w) NA
+  )
+  failed_nls <- !inherits(nls_res, "nls")
+  lambda_nls <- if (failed_nls) NA else exp(unname(coef(nls_res)["lrc"]))
+  t_gens_before <- lambda_nls / r
+  t_inferred <- t_gens_before * gen_time + sample_age
+  
+  x_values <- sort(unique(c(length, seq(0, max(ind_tracts_df$length), by = 5000))))
+  y_nls <- if (failed_nls) NA else predict(nls_res, newdata = data.frame(length = x_values + min_length))
+  predictions_df <- tibble(length = x_values, density = y_nls)
+
+  ind_df <- tibble(name = ind, sample_age = sample_age, t_inferred = t_inferred, min_length = min_length)
+
+  p_fit <- p_tracts +
+    geom_line(data = predictions_df, aes(x = length + min_length, y = density),
+              linetype = "dashed", linewidth = 0.75, color = "black") +
+    geom_text(data = ind_df,
+              aes(x = Inf, y = Inf,
+                  label = paste0(
+                    "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+                    "(", round(t_gens_before), " generations prior)"
+                  )),
+              hjust = 1.1, vjust = 2, size = 4)
+  
+  print(p_fit)
+
+  results_v3[[length(results_v3) + 1]] <- ind_df
+}
+
+dev.off()
+
+results_v3_df <- do.call(rbind, results_v3)
+```
+
+```{r}
+x_df <- inner_join(results_v3_df, metadata, by = c("name" = "sampleId", "sample_age" = "ageAverage")) %>%
+  mutate(cluster = case_when(t_inferred < 48000 ~ "x", t_inferred > 52000 ~ "y", TRUE ~ "z"))
+
+{ x_df %>%
+  ggplot() +
+  geom_point(aes(sample_age, t_inferred, color = cluster)) +
+  coord_cartesian(ylim = c(0, 100e3)) } %>%
+  ggplotly()
+```
+
+
+
 
 ### v1 vs v2 comparison
 
