@@ -43,7 +43,7 @@ model <- compile_model(
 
 samples <- rbind(
   schedule_sampling(model, times = 50e3, list(nea, 2)),
-  schedule_sampling(model, times = c(50, 40, 30, 20, 10, 0) * 1e3, list(eur, 10)),
+  schedule_sampling(model, times = c(50, 40, 30, 20, 10, 0) * 1e3, list(eur, 50)),
   schedule_sampling(model, times = 0, list(afr, 100))
 )
 
@@ -74,7 +74,7 @@ write.table(tracts_df, file = "data/sim_tracts.tsv",
 
 ``` r
 tracts_df <- read_tsv("data/sim_tracts.tsv")
-#> Rows: 2654 Columns: 7
+#> Rows: 15420 Columns: 7
 #> ── Column specification ────────────────────────────────────────────────────────
 #> Delimiter: "\t"
 #> chr (2): name, pop
@@ -87,12 +87,12 @@ head(tracts_df)
 #> # A tibble: 6 × 7
 #>   name  sample_age pop   node_id     left    right  length
 #>   <chr>      <dbl> <chr>   <dbl>    <dbl>    <dbl>   <dbl>
-#> 1 EUR_1      50000 EUR         0 18426078 20213683 1787605
-#> 2 EUR_1      50000 EUR         0 20782516 21286174  503658
-#> 3 EUR_1      50000 EUR         0 39419462 39687617  268155
-#> 4 EUR_1      50000 EUR         0 42694241 43332169  637928
-#> 5 EUR_1      50000 EUR         0 44959925 44984615   24690
-#> 6 EUR_1      50000 EUR         0 61453907 61839901  385994
+#> 1 EUR_1      50000 EUR         0 12455894 12699700  243806
+#> 2 EUR_1      50000 EUR         0 25304959 25731778  426819
+#> 3 EUR_1      50000 EUR         0 26667389 26889089  221700
+#> 4 EUR_1      50000 EUR         0 35774588 36942294 1167706
+#> 5 EUR_1      50000 EUR         0 64174838 65117853  943015
+#> 6 EUR_1      50000 EUR         0 79828958 80856293 1027335
 ```
 
 ## How does admixture dating work?
@@ -103,7 +103,7 @@ Exponential distribution is governed by the following density function
 with a *rate parameter* $\lambda$:
 
 $$
-f(\textrm{tract length }~x) \sim \lambda \exp^{-\lambda x}.
+f(\textrm{tract length }~x) \sim \lambda \exp^{-\lambda x}
 $$
 
 In the case of exponential decay of admixture tracts and after making
@@ -155,7 +155,7 @@ simulated individual
 
 ``` r
 head(tract_lengths, 10)
-#>  [1] 141083  75118 228914 169361  18097  52618 199785  23805  53689  14066
+#>  [1]  55287 171551   4923  55416  51793  80364   1490 104208 121501  12267
 ```
 
 we can compute $\hat{\lambda}$:
@@ -163,7 +163,7 @@ we can compute $\hat{\lambda}$:
 ``` r
 lambda_hat <- 1 / mean(tract_lengths)
 lambda_hat
-#> [1] 1.485309e-05
+#> [1] 1.59342e-05
 ```
 
 And get the estimate of time since Neanderthal admixture in the history
@@ -173,7 +173,7 @@ of this individual:
 r <- 1e-8 # recombination rate (crossovers per bp per generation)
 
 lambda_hat / r # admixture time in "generations before this individual lived"
-#> [1] 1485.309
+#> [1] 1593.42
 ```
 
 To get the absolute admixture time, we convert generations to years and
@@ -181,7 +181,7 @@ add the “radiocarbon date” of this individual:
 
 ``` r
 lambda_hat / r * gen_time + 10000 # absolute admixture time in "years ago"
-#> [1] 50103.36
+#> [1] 53022.34
 ```
 
 **But what if we have filtered data? Traditionally, tracts are filtered
@@ -245,7 +245,7 @@ results <- list()
 
 pdf("dating_tracts_sims.pdf", width = 14, height = 8)
 
-for (min_length in c(0, 50e3, 100e3)) {
+for (min_length in c(0, 25e3, 50e3)) {
 
   plot(1, type = "n", axes = FALSE, xlab = "", ylab = "", xlim = c(0, 1), ylim = c(0, 1))
   text(0.5, 0.5, paste("Minimum tract length:", as.integer(min_length), "bp"), cex = 3)
@@ -255,6 +255,7 @@ for (min_length in c(0, 50e3, 100e3)) {
     # cat("minimum length:", min_length, "\nsample_age:", sample_age, "\n")
     
     r <- 1e-8
+    m <- 0.03
     
     filtered_tracts <- tracts_df %>% filter(sample_age == !!sample_age, length >= min_length, length <= max_length)
     
@@ -281,16 +282,23 @@ for (min_length in c(0, 50e3, 100e3)) {
     t_gens_lmw <- lambda_lmw / r
     t_lmw <- t_gens_lmw * gen_time + sample_age
     
-    # MLE estimate of admixture time
+    # MLE estimate of admixture time (approximate)
     #  -- based on computing average length as the expectation of the theoretical exponential distribution
-    L <- mean(filtered_tracts$length)
-    lambda_mean <- 1 / (L - min_length)
+    L1 <- mean(filtered_tracts$length)
+    lambda_mean1 <- 1 / (L1 - min_length)
     
-    t_gens_mean <- lambda_mean / r
-    t_mean <- t_gens_mean * gen_time + sample_age
+    t_gens_mean1 <- lambda_mean1 / r
+    t_mean1 <- t_gens_mean1 * gen_time + sample_age
+
+    # MLE estimate of admixture time (accurate)
+    #  -- based on computing average length as the expectation of the theoretical exponential distribution
+    L2 <- mean(filtered_tracts$length)
+    lambda_mean2 <- 1 / (L2 - min_length)
+    
+    t_gens_mean2 <- lambda_mean2 / ((1 - m) * r) + 1
+    t_mean2 <- t_gens_mean2 * gen_time + sample_age
     
     # nls estimate -- computing the rate of decay (lambda) by fitting an exponential curve directly
-    # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp 
     nls_res <- tryCatch(
       nls(density ~ SSasymp(length, Asym, R0, lrc)),
       error = function(e) NA, warning = function(w) NA
@@ -311,7 +319,8 @@ for (min_length in c(0, 50e3, 100e3)) {
     legends <- c(
       sprintf("lm fit: admixture %.1f generations prior ~ %.1f kya", t_gens_lm, round(t_lm / 1e3, 1)),
       sprintf("weighted lm fit: admixture %.1f generations prior ~ %.1f kya", t_gens_lmw, round(t_lmw / 1e3, 1)),
-      sprintf("MLE fit: admixture %.1f generations prior ~ %.1f kya", t_gens_mean, round(t_mean / 1e3, 1)),
+      sprintf("approx MLE fit: admixture %.1f generations prior ~ %.1f kya", t_gens_mean1, round(t_mean1 / 1e3, 1)),
+      sprintf("MLE fit: admixture %.1f generations prior ~ %.1f kya", t_gens_mean2, round(t_mean2 / 1e3, 1)),
       sprintf("nls fit: admixture %.1f generations prior ~ %.1f kya", t_gens_nls, round(t_nls / 1e3, 1))
     )
     
@@ -321,47 +330,51 @@ for (min_length in c(0, 50e3, 100e3)) {
     x_values <- sort(unique(c(length, seq(0, max(tracts_df$length), by = 5000))))
     y_lm <- dexp(x_values, rate = lambda_lm)
     y_lmw <- dexp(x_values, rate = lambda_lmw)
-    y_mean <- dexp(x_values, rate = lambda_mean)
+    y_mean1 <- dexp(x_values, rate = lambda_mean1)
+    y_mean2 <- dexp(x_values, rate = lambda_mean2)
     y_nls <- if (failed_nls) NA else predict(nls_res, newdata = data.frame(length = x_values + min_length))
     
-    ylim <- c(min(c(density, y_lm, y_lmw, y_mean, y_nls), na.rm = TRUE),
+    ylim <- c(min(c(density, y_lm, y_lmw, y_mean1, y_mean2, y_nls), na.rm = TRUE),
               3e-5) #max(c(density, y_lm, y_mean, y_nls), na.rm = TRUE))
     plot(length, density, xlim = c(0, 1e6), main = title, ylim = ylim)
     abline(v = min_length, lty = "dashed")
     lines(x_values + min_length, y_lm, col = "purple", lty = 2, lwd = 2)
     lines(x_values + min_length, y_lmw, col = "darksalmon", lty = 2, lwd = 2)
-    lines(x_values + min_length, y_mean, col = "blue", lty = 2, lwd = 2)
+    lines(x_values + min_length, y_mean1, col = "blue", lty = 2, lwd = 2)
+    lines(x_values + min_length, y_mean2, col = "cyan", lty = 2, lwd = 2)
     if (!failed_nls)
       lines(x_values + min_length, y_nls, col = "green", lty = 2, lwd = 2)
     
-    legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = legends)
+    legend("topright", fill = c("purple", "darksalmon", "blue", "cyan", "green"), legend = legends)
     
     # plot the results on the log-transformed scale
     plot(length, log(density), xlim = c(0, 1e6), main = title, ylim = c(-15, -11))
     abline(v = min_length, lty = "dashed")
     abline(lm_res, col = "purple", lty = 2, lwd = 2)
     abline(lmw_res, col = "darksalmon", lty = 2, lwd = 2)
-    abline(a = log(lambda_mean) + lambda_mean * min_length, b = -lambda_mean, col = "blue", lty = 2, lwd = 2)
+    abline(a = log(lambda_mean1) + lambda_mean1 * min_length, b = -lambda_mean1, col = "blue", lty = 2, lwd = 2)
+    abline(a = log(lambda_mean2) + lambda_mean2 * min_length, b = -lambda_mean2, col = "cyan", lty = 2, lwd = 2)
     if (!failed_nls)
       suppressWarnings(lines(x_values, log(y_nls), col = "green", lty = 2, lwd = 2))
     
-    legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = legends)
+    legend("topright", fill = c("purple", "darksalmon", "blue", "cyan", "green"), legend = legends)
     
     par(orig_par)
     
     fitted_idx <- match(length, x_values)
     rmse_lm <- rmse(density, y_lm[fitted_idx])
     rmse_lmw <- rmse(density, y_lmw[fitted_idx])
-    rmse_mean <- rmse(density, y_mean[fitted_idx])
+    rmse_mean1 <- rmse(density, y_mean1[fitted_idx])
+    rmse_mean2 <- rmse(density, y_mean2[fitted_idx])
     rmse_nls <- rmse(density, y_nls[fitted_idx])
     
     results[[length(results) + 1]] <- tibble(
       sample_age = sample_age,
       min_length = min_length,
-      method = c("lm", "lm (weighted)", "MLE", "nls"),
-      lambda = c(lambda_lm, lambda_lmw, lambda_mean, lambda_nls),
-      rmse_density = c(rmse_lm, rmse_lmw, rmse_mean, rmse_nls),
-      t_inferred = c(t_lm, t_lmw, t_mean, t_nls),
+      method = c("lm", "lm (weighted)", "approx. MLE", "MLE", "nls"),
+      lambda = c(lambda_lm, lambda_lmw, lambda_mean1, lambda_mean2, lambda_nls),
+      rmse_density = c(rmse_lm, rmse_lmw, rmse_mean1, rmse_mean2, rmse_nls),
+      t_inferred = c(t_lm, t_lmw, t_mean1, t_mean2, t_nls),
       ratio_time = t_inferred / t_admix
     )
   
@@ -392,6 +405,7 @@ p_time <- results_df %>%
     geom_point() +
     geom_line(aes(group = method)) +
     geom_hline(yintercept = 1, linetype = "dashed") +
+    coord_cartesian(ylim = c(0.7, 1.3)) +
     theme_bw() +
     theme(text = element_text(size = 15)) +
     xlab("sample age [years ago]") +
@@ -404,7 +418,7 @@ cowplot::plot_grid(p_density, p_time, nrow = 2)
 
 ![](dating_tracts_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
 
-**Note:** The stricted the minimum length cutoff, the higher the RMSE of
+**Note:** The stricter the minimum length cutoff, the higher the RMSE of
 a fit against the real data, and this is worse the younger the sample
 is. This is because young samples have the highest proportion of very
 short tracts (and very few longer tracts), so the exponential decay data
@@ -448,7 +462,7 @@ cowplot::plot_grid(p_density2, p_time2, nrow = 2)
 ``` r
 # min_length <- 0
 
-pdf("dating_tracts_sims_v2.pdf", width = 12, height = 10)
+pdf("dating_tracts_sims_v2.pdf", width = 12, height = 8)
 
 results_v2 <- list()
 
@@ -481,12 +495,13 @@ for (min_length in c(0, 50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
     facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
   
   r <- 1e-8
+  m <- 0.03
   
   exp_df <- group_by(tracts_filt_df, sample_age) %>%
     summarise(L = mean(length)) %>%
     mutate(
       lambda = 1 / (L - min_length),
-      t_gen = lambda / r,
+      t_gen = lambda / ((1 - m) * r) + 1,
       t_before = t_gen * gen_time,
       t_inferred = t_before + sample_age
     )
@@ -657,15 +672,16 @@ tracts_df <- select(metadata, sampleId, ageAverage, sample_age, coverage) %>%
 ```
 
 ``` r
+tracts_df %>%
 ggplot() +
-  geom_density(data = tracts_df, aes(length), alpha = 0.2) +
+  geom_density(aes(length), alpha = 0.2) +
   geom_histogram(
-    data = tracts_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
     binwidth = 10000, alpha = 0.75
   ) +
   labs(
     x = "tract length [bp]", y = "density", fill = "age of sample",
-    title = "Tract length distribution as a function of admixed sample's age"
+    title = "Tract length distribution as a function of samples' age"
   ) +
   scale_x_continuous(labels = scales::comma) +
   expand_limits(y = 0) +
@@ -681,10 +697,13 @@ ggplot() +
 ggplot(tracts_df) +
   geom_density(aes(length, color = sample_age)) +
   coord_cartesian(xlim = c(0, 1e6)) +
-  theme_bw()
+  theme_bw() +
+  theme(legend.position = "bottom")
 ```
 
 ![](dating_tracts_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+
+### v1 estimate
 
 ``` r
 # sample_age <- "present-day"
@@ -706,6 +725,7 @@ for (min_length in c(50e3)) {
     # cat("minimum length:", min_length, "\nsample_age:", sample_age, "\n")
     
     r <- 1e-8
+    m <- 0.03
     
     filtered_tracts <- tracts_df %>% filter(sample_age == !!sample_age, length >= min_length, length <= max_length)
     # replace the sample age factor level with the actual numerical age
@@ -734,13 +754,21 @@ for (min_length in c(50e3)) {
     t_gens_lmw <- lambda_lmw / r
     t_lmw <- t_gens_lmw * gen_time + sample_age
     
-    # MLE estimate of admixture time
+    # MLE estimate of admixture time (approximate)
     #  -- based on computing average length as the expectation of the theoretical exponential distribution
-    L <- mean(filtered_tracts$length)
-    lambda_mean <- 1 / (L - min_length)
+    L1 <- mean(filtered_tracts$length)
+    lambda_mean1 <- 1 / (L1 - min_length)
     
-    t_gens_mean <- lambda_mean / r
-    t_mean <- t_gens_mean * gen_time + sample_age
+    t_gens_mean1 <- lambda_mean1 / r
+    t_mean1 <- t_gens_mean1 * gen_time + sample_age
+
+    # MLE estimate of admixture time (accurate)
+    #  -- based on computing average length as the expectation of the theoretical exponential distribution
+    L2 <- mean(filtered_tracts$length)
+    lambda_mean2 <- 1 / (L2 - min_length)
+    
+    t_gens_mean2 <- lambda_mean2 / ((1 - m) * r) + 1
+    t_mean2 <- t_gens_mean2 * gen_time + sample_age
     
     # nls estimate -- computing the rate of decay (lambda) by fitting an exponential curve directly
     # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp 
@@ -764,7 +792,8 @@ for (min_length in c(50e3)) {
     legends <- c(
       sprintf("lm fit: admixture %.1f generations prior ~ %.1f kya", t_gens_lm, round(t_lm / 1e3, 1)),
       sprintf("weighted lm fit: admixture %.1f generations prior ~ %.1f kya", t_gens_lmw, round(t_lmw / 1e3, 1)),
-      sprintf("MLE fit: admixture %.1f generations prior ~ %.1f kya", t_gens_mean, round(t_mean / 1e3, 1)),
+      sprintf("approx. MLE fit: admixture %.1f generations prior ~ %.1f kya", t_gens_mean1, round(t_mean1 / 1e3, 1)),
+      sprintf("MLE fit: admixture %.1f generations prior ~ %.1f kya", t_gens_mean2, round(t_mean2 / 1e3, 1)),
       sprintf("nls fit: admixture %.1f generations prior ~ %.1f kya", t_gens_nls, round(t_nls / 1e3, 1))
     )
     
@@ -774,47 +803,51 @@ for (min_length in c(50e3)) {
     x_values <- sort(unique(c(length, seq(0, max(tracts_df$length), by = 5000))))
     y_lm <- dexp(x_values, rate = lambda_lm)
     y_lmw <- dexp(x_values, rate = lambda_lmw)
-    y_mean <- dexp(x_values, rate = lambda_mean)
+    y_mean1 <- dexp(x_values, rate = lambda_mean1)
+    y_mean2 <- dexp(x_values, rate = lambda_mean2)
     y_nls <- if (failed_nls) NA else predict(nls_res, newdata = data.frame(length = x_values + min_length))
     
-    ylim <- c(min(c(density, y_lm, y_lmw, y_mean, y_nls), na.rm = TRUE),
+    ylim <- c(min(c(density, y_lm, y_lmw, y_mean1, y_mean2, y_nls), na.rm = TRUE),
               3e-5) #max(c(density, y_lm, y_mean, y_nls), na.rm = TRUE))
     plot(length, density, xlim = c(0, 1e6), main = title, ylim = ylim)
     abline(v = min_length, lty = "dashed")
     lines(x_values + min_length, y_lm, col = "purple", lty = 2, lwd = 2)
     lines(x_values + min_length, y_lmw, col = "darksalmon", lty = 2, lwd = 2)
-    lines(x_values + min_length, y_mean, col = "blue", lty = 2, lwd = 2)
+    lines(x_values + min_length, y_mean1, col = "blue", lty = 2, lwd = 2)
+    lines(x_values + min_length, y_mean2, col = "cyan", lty = 2, lwd = 2)
     if (!failed_nls)
       lines(x_values + min_length, y_nls, col = "green", lty = 2, lwd = 2)
     
-    legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = legends)
+    legend("topright", fill = c("purple", "darksalmon", "blue", "cyan", "green"), legend = legends)
     
     # plot the results on the log-transformed scale
     plot(length, log(density), xlim = c(0, 1e6), main = title, ylim = c(-15, -11))
     abline(v = min_length, lty = "dashed")
     abline(lm_res, col = "purple", lty = 2, lwd = 2)
     abline(lmw_res, col = "darksalmon", lty = 2, lwd = 2)
-    abline(a = log(lambda_mean) + lambda_mean * min_length, b = -lambda_mean, col = "blue", lty = 2, lwd = 2)
+    abline(a = log(lambda_mean1) + lambda_mean1 * min_length, b = -lambda_mean1, col = "blue", lty = 2, lwd = 2)
+    abline(a = log(lambda_mean2) + lambda_mean2 * min_length, b = -lambda_mean2, col = "cyan", lty = 2, lwd = 2)
     if (!failed_nls)
       suppressWarnings(lines(x_values, log(y_nls), col = "green", lty = 2, lwd = 2))
     
-    legend("topright", fill = c("purple", "darksalmon", "blue", "green"), legend = legends)
+    legend("topright", fill = c("purple", "darksalmon", "blue", "cyan", "green"), legend = legends)
     
     par(orig_par)
     
     fitted_idx <- match(length, x_values)
     rmse_lm <- rmse(density, y_lm[fitted_idx])
     rmse_lmw <- rmse(density, y_lmw[fitted_idx])
-    rmse_mean <- rmse(density, y_mean[fitted_idx])
+    rmse_mean1 <- rmse(density, y_mean1[fitted_idx])
+    rmse_mean2 <- rmse(density, y_mean2[fitted_idx])
     rmse_nls <- rmse(density, y_nls[fitted_idx])
     
     results[[length(results) + 1]] <- tibble(
       sample_age = as.integer(sample_age),
       min_length = as.integer(min_length),
-      method = c("lm", "lm (weighted)", "MLE", "nls"),
-      lambda = c(lambda_lm, lambda_lmw, lambda_mean, lambda_nls),
-      rmse_density = c(rmse_lm, rmse_lmw, rmse_mean, rmse_nls),
-      t_inferred = c(t_lm, t_lmw, t_mean, t_nls)
+      method = c("lm", "lm (weighted)", "approx. MLE", "MLE", "nls"),
+      lambda = c(lambda_lm, lambda_lmw, lambda_mean1, lambda_mean2, lambda_nls),
+      rmse_density = c(rmse_lm, rmse_lmw, rmse_mean1, rmse_mean2, rmse_nls),
+      t_inferred = c(t_lm, t_lmw, t_mean1, t_mean2, t_nls)
     )
   
   }
@@ -833,6 +866,7 @@ p_density <- results_df %>%
     geom_point() +
     geom_line(aes(group = method)) +
     theme_bw() +
+  expand_limits(y = c(0, 0.3e-5)) +
     theme(text = element_text(size = 15)) +
     xlab("sample age [years ago]") +
     ylab("RMSE observed vs fitted tract length density") +
@@ -844,6 +878,7 @@ p_density2 <- results_df %>%
   ggplot(aes(method, rmse_density)) +
   geom_boxplot(aes(color = method)) +
   geom_jitter() +
+  expand_limits(y = c(0, 0.3e-5)) +
   theme_bw() +
   theme(text = element_text(size = 15)) +
   facet_wrap(
@@ -890,12 +925,12 @@ cowplot::plot_grid(p_time, p_time2, nrow = 2)
 
 ![](dating_tracts_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
-## Estimating admixture time from tract lengths v2
+### v2 estimate
 
 ``` r
 # min_length <- 50e3
 
-pdf("dating_tracts_empirical_v2.pdf", width = 12, height = 10)
+pdf("dating_tracts_empirical_v2.pdf", width = 12, height = 8)
 
 results_v2 <- list()
 
@@ -924,17 +959,19 @@ for (min_length in c(50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
     expand_limits(y = 0, x = 0) +
     coord_cartesian(xlim = c(0, 2e6), ylim = c(0, 2e-5)) +
     theme_minimal() +
-    theme(legend.position = "none", text = element_text(size = 15)) +
-    facet_wrap(~ sample_age,
+    theme(legend.position = "none", text = element_text(size = 15),
+          axis.text.x = element_text(hjust = 1, angle = 45)) +
+    facet_wrap(~ sample_age, nrow = 2,
                labeller = labeller(sample_age = function(x) paste("sample age =", x, ifelse(x != "present-day", "kya", ""))))
   
   r <- 1e-8
-
+  m <- 0.03
+  
   exp_df <- group_by(tracts_filt_df, sample_age) %>%
     summarise(L = mean(length), ageAverage = as.integer(mean(unique(ageAverage)))) %>%
     mutate(
       lambda = 1 / (L - min_length),
-      t_gen = lambda / r,
+      t_gen = lambda / ((1 - m) * r) + 1,
       t_before = t_gen * gen_time,
       t_inferred = t_before + ageAverage
     )
@@ -973,6 +1010,8 @@ dev.off()
 results_v2_df <- do.call(rbind, results_v2)
 ```
 
+### v1 vs v2 comparison
+
 ``` r
 inner_join(
   filter(results_df, method == "MLE") %>% select(sample_age, min_length, t_inferred),
@@ -983,6 +1022,123 @@ inner_join(
   .$equal %>%
   all()
 #> [1] TRUE
+```
+
+``` r
+results_v2_df %>%
+filter(min_length == 50e3) %>%
+ggplot(aes(factor(sample_age), t_inferred, group = 1)) +
+  geom_line() +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  geom_hline(yintercept = 55e3, linetype = "dashed") +
+  theme_bw() +
+  labs(x = "average sample age in a group",
+       y = "time of Neanderthal admixture [years ago]") +
+  ggtitle("Inferred Neanderthal admixture time for each age group")
+```
+
+![](dating_tracts_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+
+## Estimating admixture time from tract lengths v2 (genetic distance)
+
+``` r
+recmap <- suppressMessages(read_recmap("~/Downloads/plink"))
+recmap
+#> # A tibble: 3,303,900 × 4
+#>    chrom `_`     posg    pos
+#>    <chr> <chr>  <dbl>  <dbl>
+#>  1 chr1  .     0       55550
+#>  2 chr1  .     0.0806  82571
+#>  3 chr1  .     0.0922  88169
+#>  4 chr1  .     0.439  254996
+#>  5 chr1  .     1.48   564598
+#>  6 chr1  .     1.48   564621
+#>  7 chr1  .     1.48   565433
+#>  8 chr1  .     1.49   568322
+#>  9 chr1  .     1.49   568527
+#> 10 chr1  .     1.93   721290
+#> # ℹ 3,303,890 more rows
+```
+
+``` r
+min_length <- 50e3 / 1e6
+
+# # pdf("dating_tracts_empirical_v2_gendist.pdf", width = 12, height = 8)
+# 
+# results_v2_gen <- list()
+# 
+# max_length <- Inf
+# 
+# # for (min_length in c(50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
+  tracts_filt_df <- tracts_df %>%
+    convert_genetic(recmap, ., cols = c("start", "end")) %>%
+    mutate(length_gen = end_gen - start_gen) %>%
+    filter(length_gen >= min_length, length <= max_length)
+# 
+#   p_tracts <-
+#     ggplot() +
+#     # geom_histogram(
+#     #   data = tracts_filt_df, aes(x = length_gen, y = after_stat(density), fill = as.factor(sample_age)),
+#     #   binwidth = 0.1, alpha = 0.75) +
+#     geom_density(
+#       data = tracts_filt_df, aes(x = length_gen, y = after_stat(density), fill = as.factor(sample_age)),
+#       alpha = 0.75, color = FALSE) +
+#     labs(
+#       x = "tract length [bp]", y = "density", fill = "age of sample",
+#       title = "Tract length distribution as a function of admixed sample's age",
+#       subtitle = paste0(
+#         "(assuming single-pulse admixture at ~ 55 kya, tract length [",
+#         as.integer(min_length / 1e3), " kb, ", max_length / 1e6," Mb])"
+#       )
+#     ) +
+#     scale_x_continuous(labels = scales::comma) +
+#     # expand_limits(y = 0, x = 0) +
+#     # coord_cartesian(xlim = c(0, 2e6), ylim = c(0, 2e-5)) +
+#     theme_minimal() +
+#     theme(legend.position = "none", text = element_text(size = 15),
+#           axis.text.x = element_text(hjust = 1, angle = 45)) +
+#     facet_wrap(~ sample_age, nrow = 2,
+#                labeller = labeller(sample_age = function(x) paste("sample age =", x, ifelse(x != "present-day", "kya", "")))); p_tracts
+#   
+#   exp_df <- group_by(tracts_filt_df, sample_age) %>%
+#     summarise(L = mean(length_gen), ageAverage = as.integer(mean(unique(ageAverage)))) %>%
+#     mutate(
+#       lambda = 1 / (L - min_length / 1e6),
+#       t_gen = lambda * 100,
+#       t_before = t_gen * gen_time,
+#       t_inferred = t_before + ageAverage
+#     )
+#   
+#   exp_decay <- function(lambda, max) {
+#     data.frame(length_gen = seq(0, max, by = 0.01)) %>%
+#       mutate(density = dexp(length_gen, rate = lambda))
+#   }
+#   
+#   predictions_df <-
+#     exp_df %>%
+#     select(sample_age, lambda) %>%
+#     rowwise() %>%
+#     mutate(exp_data = list(exp_decay(lambda, max(tracts_filt_df$length_gen)))) %>%
+#     unnest(cols = c(exp_data)) %>%
+#     select(-lambda)
+#   
+#   p_fit <- p_tracts +
+#     geom_line(data = predictions_df, aes(x = length_gen + min_length / 1e6, y = density),
+#               linetype = "dashed", linewidth = 0.75, color = "black") +
+#     geom_text(data = exp_df,
+#               aes(x = Inf, y = Inf, color = as.factor(sample_age),
+#                   label = paste0(
+#                     "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+#                     "(", round(t_gen), " generations prior)"
+#                   )),
+#               hjust = 1.1, vjust = 2, size = 4); print(p_fit)
+#   
+#   results_v2_gen[[length(results_v2_gen) + 1]] <- exp_df %>% mutate(min_length = as.integer(min_length) / 1e6)
+# }
+# 
+# dev.off()
+# 
+# results_v2_gen_df <- do.call(rbind, results_v2_gen)
 ```
 
 ## Fitting exponential decay of truncated distributions
@@ -1004,7 +1160,7 @@ x_full <- rexp(1e6, rate = lambda_true)
 h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
 ```
 
-![](dating_tracts_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+![](dating_tracts_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
 
 We can fit an exponential function using a MLE estimate of $\lambda$,
 which can be computed from an estimate of the mean $\bar{x}$ of the
@@ -1028,7 +1184,7 @@ y_values <- dexp(x_values, rate = lambda_full)
 lines(x_values, sum(h_full$counts) * y_values, col = "orange", lty = "dashed", lwd = 3)
 ```
 
-![](dating_tracts_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
+![](dating_tracts_files/figure-gfm/unnamed-chunk-36-1.png)<!-- -->
 
 Let’s now truncate the observed exponentially-distributed data starting
 from a given cutoff value $c$.
@@ -1041,7 +1197,7 @@ x_trunc <- x_full[x_full > c]
 h_trunc <- hist(x_trunc, breaks = 100, ylim = c(0, max(h_full$counts)), xlim = c(0, max(h_full$mids)), col = "grey36", border = FALSE)
 ```
 
-![](dating_tracts_files/figure-gfm/unnamed-chunk-34-1.png)<!-- -->
+![](dating_tracts_files/figure-gfm/unnamed-chunk-37-1.png)<!-- -->
 
 The mean of the truncated exponential $\bar{x}'$ is:
 
@@ -1087,7 +1243,7 @@ h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
 h_trunc <- hist(x_trunc, breaks = 100, ylim = c(0, max(h_full$counts)), add = TRUE, col = "grey36", border = FALSE)
 ```
 
-![](dating_tracts_files/figure-gfm/unnamed-chunk-39-1.png)<!-- -->
+![](dating_tracts_files/figure-gfm/unnamed-chunk-42-1.png)<!-- -->
 
 ``` r
 h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
@@ -1098,7 +1254,7 @@ y_values <- dexp(x_values, rate = lambda_hat)
 lines(x_values, sum(h_full$counts) * y_values, col = "red", lty = "dashed", lwd = 3)
 ```
 
-![](dating_tracts_files/figure-gfm/unnamed-chunk-40-1.png)<!-- -->
+![](dating_tracts_files/figure-gfm/unnamed-chunk-43-1.png)<!-- -->
 
 ``` r
 h_full <- hist(x_full, breaks = 100, freq = TRUE, border = FALSE)
@@ -1113,7 +1269,7 @@ y_values <- dexp(x_values, rate = lambda_full)
 lines(x_values, sum(h_full$counts) * y_values, col = "orange", lty = "dashed", lwd = 3)
 ```
 
-![](dating_tracts_files/figure-gfm/unnamed-chunk-41-1.png)<!-- -->
+![](dating_tracts_files/figure-gfm/unnamed-chunk-44-1.png)<!-- -->
 
 Basically, what we’re doing by this is take the truncated distribution
 (truncated from $c$ to the right) as if it was some other non-truncated
@@ -1209,7 +1365,7 @@ ggplot(tracts_df) +
   scale_x_log10()
 ```
 
-![](dating_tracts_files/figure-gfm/unnamed-chunk-44-1.png)<!-- -->
+![](dating_tracts_files/figure-gfm/unnamed-chunk-47-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -1217,7 +1373,7 @@ ggplot(tracts_df) +
   coord_cartesian(xlim = c(0, 1e6))
 ```
 
-![](dating_tracts_files/figure-gfm/unnamed-chunk-45-1.png)<!-- -->
+![](dating_tracts_files/figure-gfm/unnamed-chunk-48-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -1225,7 +1381,7 @@ ggplot(tracts_df) +
   geom_hline(yintercept = c(50e3, 250e3), linetype = "dashed")
 ```
 
-![](dating_tracts_files/figure-gfm/unnamed-chunk-46-1.png)<!-- -->
+![](dating_tracts_files/figure-gfm/unnamed-chunk-49-1.png)<!-- -->
 
 ``` r
 ggplot(tracts_df) +
@@ -1234,6 +1390,4 @@ ggplot(tracts_df) +
   coord_cartesian(ylim = c(50e3, 250e3)) 
 ```
 
-![](dating_tracts_files/figure-gfm/unnamed-chunk-47-1.png)<!-- -->
-
-## More elaborate LD covariance analysis
+![](dating_tracts_files/figure-gfm/unnamed-chunk-50-1.png)<!-- -->

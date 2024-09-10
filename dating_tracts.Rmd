@@ -406,6 +406,7 @@ p_time <- results_df %>%
     geom_point() +
     geom_line(aes(group = method)) +
     geom_hline(yintercept = 1, linetype = "dashed") +
+    coord_cartesian(ylim = c(0.7, 1.3)) +
     theme_bw() +
     theme(text = element_text(size = 15)) +
     xlab("sample age [years ago]") +
