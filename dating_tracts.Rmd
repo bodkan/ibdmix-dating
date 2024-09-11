@@ -63,12 +63,18 @@ plot_model(model, proportions = TRUE, order = c("AFR", "EUR", "ancestor", "NEA")
 ```
 
 ```{r, eval=!file.exists("data/sim_tracts.tsv")}
-ts <- msprime(model, sequence_length = 100e6, recombination_rate = 1e-8, samples = samples, random_seed = 42) %>%
+x = Sys.time()
+ts <- msprime(model, sequence_length = 500e6, recombination_rate = 1e-8, samples = samples, random_seed = 42) %>%
   ts_mutate(1e-8, random_seed = 42)
+y = Sys.time()
 
 tracts <- ts_tracts(ts, census = t_admix, quiet = TRUE)
+z = Sys.time()
 
 ts_save(ts, "data/dating.trees")
+
+y-x # Time difference of 25.93642 mins
+z-x # Time difference of 28.25553 mins
 ```
 
 ```{r, eval=!file.exists("data/sim_tracts.tsv")}
