@@ -246,8 +246,8 @@ ggplot() +
 ### v1 estimate
 
 ```{r}
-# sample_age <- 0
-# min_length <- 0
+# sample_age <- 10e3
+# min_length <- 100e3
 
 max_length <- Inf
 
@@ -255,7 +255,7 @@ results <- list()
 
 pdf("dating_tracts_sims.pdf", width = 14, height = 8)
 
-for (min_length in c(0, 25e3, 50e3)) {
+for (min_length in c(0, 25e3, 50e3, 75e3, 100e3)) {
 
   plot(1, type = "n", axes = FALSE, xlab = "", ylab = "", xlim = c(0, 1), ylim = c(0, 1))
   text(0.5, 0.5, paste("Minimum tract length:", as.integer(min_length), "bp"), cex = 3)
@@ -269,9 +269,11 @@ for (min_length in c(0, 25e3, 50e3)) {
     
     filtered_tracts <- tracts_df %>% filter(sample_age == !!sample_age, length >= min_length, length <= max_length)
     
-    bin_data <- hist(filtered_tracts$length, plot = FALSE, breaks = 100)
-    density <- bin_data$density
-    length <- bin_data$mids[density > 0]
+    # bin the tracts, discarding the very first bin due to very frequent bining artifacts
+    # (the lowest bin being extremely small, misrepresenting the true distribution of the data)
+    bin_data <- hist(filtered_tracts$length, plot = FALSE, breaks = 101)
+    density <- bin_data$density[-1]
+    length <- bin_data$mids[-1][density > 0]
     density <- density[density > 0]
     
     # lm estimate of admixture time
@@ -315,7 +317,7 @@ for (min_length in c(0, 25e3, 50e3)) {
     )
     failed_nls <- !inherits(nls_res, "nls")
     lambda_nls <- if (failed_nls) NA else exp(unname(coef(nls_res)["lrc"]))
-    t_gens_nls <- lambda_nls / r
+    t_gens_nls <- lambda_nls / ((1 - m) * r) + 1
     t_nls <- t_gens_nls * gen_time + sample_age
     
     # plotting
@@ -348,26 +350,26 @@ for (min_length in c(0, 25e3, 50e3)) {
               3e-5) #max(c(density, y_lm, y_mean, y_nls), na.rm = TRUE))
     plot(length, density, xlim = c(0, 1e6), main = title, ylim = ylim)
     abline(v = min_length, lty = "dashed")
-    lines(x_values + min_length, y_lm, col = "purple", lty = 2, lwd = 2)
-    lines(x_values + min_length, y_lmw, col = "darksalmon", lty = 2, lwd = 2)
-    lines(x_values + min_length, y_mean1, col = "blue", lty = 2, lwd = 2)
-    lines(x_values + min_length, y_mean2, col = "cyan", lty = 2, lwd = 2)
+    lines(x_values + min_length, y_lm, col = "olivedrab4", lty = 2, lwd = 2)
+    lines(x_values + min_length, y_lmw, col = "springgreen2", lty = 2, lwd = 2)
+    lines(x_values + min_length, y_mean1, col = "red", lty = 2, lwd = 2)
+    lines(x_values + min_length, y_mean2, col = "steelblue3", lty = 2, lwd = 2)
     if (!failed_nls)
-      lines(x_values + min_length, y_nls, col = "green", lty = 2, lwd = 2)
-    
-    legend("topright", fill = c("purple", "darksalmon", "blue", "cyan", "green"), legend = legends)
+      lines(x_values + min_length, y_nls, col = "purple", lty = 2, lwd = 2)
+
+    legend("topright", fill = c("olivedrab4", "springgreen2", "red", "steelblue3", "purple"), legend = legends)
     
     # plot the results on the log-transformed scale
     plot(length, log(density), xlim = c(0, 1e6), main = title, ylim = c(-15, -11))
     abline(v = min_length, lty = "dashed")
-    abline(lm_res, col = "purple", lty = 2, lwd = 2)
-    abline(lmw_res, col = "darksalmon", lty = 2, lwd = 2)
-    abline(a = log(lambda_mean1) + lambda_mean1 * min_length, b = -lambda_mean1, col = "blue", lty = 2, lwd = 2)
-    abline(a = log(lambda_mean2) + lambda_mean2 * min_length, b = -lambda_mean2, col = "cyan", lty = 2, lwd = 2)
+    abline(lm_res, col = "olivedrab4", lty = 2, lwd = 2)
+    abline(lmw_res, col = "springgreen2", lty = 2, lwd = 2)
+    abline(a = log(lambda_mean1) + lambda_mean1 * min_length, b = -lambda_mean1, col = "red", lty = 2, lwd = 2)
+    abline(a = log(lambda_mean2) + lambda_mean2 * min_length, b = -lambda_mean2, col = "steelblue3", lty = 2, lwd = 2)
     if (!failed_nls)
-      suppressWarnings(lines(x_values, log(y_nls), col = "green", lty = 2, lwd = 2))
+      suppressWarnings(lines(x_values, log(y_nls), col = "purple", lty = 2, lwd = 2))
     
-    legend("topright", fill = c("purple", "darksalmon", "blue", "cyan", "green"), legend = legends)
+    legend("topright", fill = c("olivedrab4", "springgreen2", "red", "steelblue3", "purple"), legend = legends)
     
     par(orig_par)
     
@@ -405,7 +407,7 @@ p_density <- results_df %>%
     theme(text = element_text(size = 15)) +
     xlab("sample age [years ago]") +
     ylab("RMSE observed vs fitted tract length density") +
-    facet_wrap(~ min_length,
+    facet_wrap(~ min_length, nrow = 1,
                labeller = labeller(min_length = function(x) paste("minimum segment length =", as.integer(x) / 1e3, "kb")))
 
 p_time <- results_df %>%
@@ -413,12 +415,12 @@ p_time <- results_df %>%
     geom_point() +
     geom_line(aes(group = method)) +
     geom_hline(yintercept = 1, linetype = "dashed") +
-    coord_cartesian(ylim = c(0.7, 1.3)) +
+    coord_cartesian(ylim = c(0.6, 1.4)) +
     theme_bw() +
     theme(text = element_text(size = 15)) +
     xlab("sample age [years ago]") +
     ylab("inferred / true admixture time") +
-    facet_wrap(~ min_length,
+    facet_wrap(~ min_length, nrow = 1,
                labeller = labeller(min_length = function(x) paste("minimum segment length =", as.integer(x) / 1e3, "kb")))
 
 cowplot::plot_grid(p_density, p_time, nrow = 2)
@@ -435,7 +437,7 @@ p_density2 <- results_df %>%
   theme_bw() +
   theme(text = element_text(size = 15)) +
   facet_wrap(
-    ~ min_length,
+    ~ min_length, nrow = 1,
     labeller = labeller(min_length = function(x) paste("minimum tract length =", as.integer(x) / 1e3, "kb"))
   )
 
@@ -447,7 +449,7 @@ p_time2 <- results_df %>%
   theme_bw() +
   theme(text = element_text(size = 15)) +
   facet_wrap(
-    ~ min_length,
+    ~ min_length, nrow = 1,
     labeller = labeller(min_length = function(x) paste("minimum tract length =", as.integer(x) / 1e3, "kb"))
   )
 
@@ -469,6 +471,19 @@ max_length <- Inf
 
 for (min_length in c(0, 50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
   tracts_filt_df <- tracts_df %>% filter(length >= min_length, length <= max_length)
+    
+  age_bins <-
+    tibble(sample_age = unique(tracts_filt_df$sample_age)) %>%
+    mutate(bins = lapply(sample_age, function(x) {
+      # bin the tracts, discarding the very first bin due to very frequent bining artifacts
+      # (the lowest bin being extremely small, misrepresenting the true distribution of the data)
+      bin_data <- hist(filter(tracts_filt_df, sample_age == x)$length, plot = FALSE, breaks = 101)
+      density <- bin_data$density[-1]
+      length <- bin_data$mids[-1][density > 0]
+      density <- density[density > 0]
+      tibble(length, density)
+    })) %>% unnest(bins)
+
 
   p_tracts <-
     ggplot() +
@@ -495,33 +510,29 @@ for (min_length in c(0, 50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
   
   r <- 1e-8
   m <- 0.03
-  
-  exp_df <- group_by(tracts_filt_df, sample_age) %>%
-    summarise(L = mean(length)) %>%
-    mutate(
-      lambda = 1 / (L - min_length),
-      t_gen = lambda / ((1 - m) * r) + 1,
-      t_before = t_gen * gen_time,
-      t_inferred = t_before + sample_age
-    )
-  
-  exp_decay <- function(lambda, max) {
-    data.frame(length = seq(0, max, by = 1000)) %>%
-      mutate(density = dexp(length, rate = lambda))
-  }
-  
-  predictions_df <-
-    exp_df %>%
-    select(sample_age, lambda) %>%
-    rowwise() %>%
-    mutate(exp_data = list(exp_decay(lambda, max(tracts_filt_df$length)))) %>%
-    unnest(cols = c(exp_data)) %>%
-    select(-lambda)
+
+  fit_df <- lapply(unique(age_bins$sample_age),
+      function(x) {
+        bin_df <- filter(age_bins, sample_age == x)
+        nls_res <- tryCatch(
+          nls(density ~ SSasymp(length, Asym, R0, lrc), data = bin_df),
+          error = function(e) NA, warning = function(w) NA
+        )
+        failed_nls <- !inherits(nls_res, "nls")
+        lambda_nls <- if (failed_nls) NA else exp(unname(coef(nls_res)["lrc"]))
+        t_gens_nls <- lambda_nls / ((1 - m) * r) + 1
+        t_nls <- t_gens_nls * gen_time + x
+        y_nls <- if (failed_nls) NA else predict(nls_res, newdata = data.frame(length = x_values + min_length))
+        tibble(sample_age = x,
+               t_inferred = t_nls,
+               t_gen = t_gens_nls,
+               fit = list(tibble(length = x_values + min_length, density = y_nls)))
+      }
+    ) %>% do.call(rbind, .)
   
   p_fit <- p_tracts +
-    geom_line(data = predictions_df, aes(x = length + min_length, y = density),
-              linetype = "dashed", linewidth = 0.75, color = "black") +
-    geom_text(data = exp_df,
+    geom_line(data = unnest(fit_df, fit), aes(x = length, y = density), linetype = "dashed") +
+    geom_text(data = fit_df,
               aes(x = Inf, y = Inf, color = as.factor(sample_age),
                   label = paste0(
                     "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
@@ -529,9 +540,11 @@ for (min_length in c(0, 50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
                   )),
               hjust = 1.2, vjust = 8, size = 4)
   
+
+
   print(p_fit)
   
-  results_v2[[length(results_v2) + 1]] <- exp_df %>% mutate(min_length = min_length)
+  results_v2[[length(results_v2) + 1]] <- fit_df %>% mutate(min_length = min_length)
 }
 
 dev.off()
@@ -541,7 +554,7 @@ results_v2_df <- do.call(rbind, results_v2)
 
 ```{r}
 inner_join(
-  filter(results_df, method == "MLE") %>% select(sample_age, min_length, t_inferred),
+  filter(results_df, method == "nls") %>% select(sample_age, min_length, t_inferred),
   select(results_v2_df, sample_age, min_length, t_inferred),
   by = c("sample_age", "min_length")
 ) %>%
@@ -568,7 +581,7 @@ results_v3 <- list()
 
 max_length <- Inf
 
-all_inds <- tracts_df %>% filter(sample_age < 20e3) %>%arrange(-sample_age) %>% pull(name) %>% unique
+all_inds <- tracts_df %>% arrange(-sample_age) %>% pull(name) %>% unique
 
 pdf("dating_tracts_sim_inds.pdf", width = 12, height = 8)
 
