@@ -458,12 +458,117 @@ cowplot::plot_grid(p_density2, p_time2, nrow = 2)
 
 
 
-### v2 estimate
+### v2 (MLE) estimate
 
 ```{r}
 # min_length <- 0
 
-pdf("dating_tracts_sims_v2.pdf", width = 12, height = 8)
+pdf("dating_tracts_sims_v2_mle.pdf", width = 12, height = 8)
+
+results_v2 <- list()
+
+max_length <- Inf
+
+for (min_length in c(0, 50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
+  tracts_filt_df <- tracts_df %>% filter(length >= min_length, length <= max_length)
+
+  p_tracts <-
+    ggplot() +
+    geom_histogram(
+      data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+      binwidth = 10000, alpha = 0.75) +
+    # geom_density(
+    #   data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    #   bw = 5000, alpha = 0.75, color = FALSE) +
+    labs(
+      x = "tract length [bp]", y = "density", fill = "age of sample",
+      title = "Tract length distribution as a function of admixed sample's age",
+      subtitle = paste0(
+        "(assuming single-pulse admixture at ~ 55 kya, tract length [",
+        as.integer(min_length / 1e3), " kb, ", max_length / 1e6," Mb])"
+      )
+    ) +
+    scale_x_continuous(labels = scales::comma) +
+    expand_limits(y = 0, x = 0) +
+    coord_cartesian(ylim = c(0, 2e-5)) +
+    theme_minimal() +
+    theme(legend.position = "none", text = element_text(size = 15)) +
+    facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
+  
+  r <- 1e-8
+  m <- 0.03
+  
+  exp_df <- group_by(tracts_filt_df, sample_age) %>%
+    summarise(L = mean(length)) %>%
+    mutate(
+      lambda = 1 / (L - min_length),
+      t_gen = lambda / ((1 - m) * r) + 1,
+      t_before = t_gen * gen_time,
+      t_inferred = t_before + sample_age
+    )
+  
+  exp_decay <- function(lambda, max) {
+    data.frame(length = seq(0, max, by = 1000)) %>%
+      mutate(density = dexp(length, rate = lambda))
+  }
+  
+  predictions_df <-
+    exp_df %>%
+    select(sample_age, lambda) %>%
+    rowwise() %>%
+    mutate(exp_data = list(exp_decay(lambda, max(tracts_filt_df$length)))) %>%
+    unnest(cols = c(exp_data)) %>%
+    select(-lambda)
+  
+  p_fit <- p_tracts +
+    geom_line(data = predictions_df, aes(x = length + min_length, y = density),
+              linetype = "dashed", linewidth = 0.75, color = "black") +
+    geom_text(data = exp_df,
+              aes(x = Inf, y = Inf, color = as.factor(sample_age),
+                  label = paste0(
+                    "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+                    "(", round(t_gen), " generations prior)"
+                  )),
+              hjust = 1.2, vjust = 8, size = 4)
+  
+  print(p_fit)
+  
+  results_v2[[length(results_v2) + 1]] <- exp_df %>% mutate(min_length = min_length)
+}
+
+dev.off()
+
+results_v2_df <- do.call(rbind, results_v2)
+```
+
+```{r}
+inner_join(
+  filter(results_df, method == "MLE") %>% select(sample_age, min_length, t_inferred),
+  select(results_v2_df, sample_age, min_length, t_inferred),
+  by = c("sample_age", "min_length")
+) %>%
+  mutate(equal = t_inferred.x == t_inferred.y) %>%
+  .$equal %>%
+  all()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+### v2 (NLS) estimate
+
+```{r}
+# min_length <- 0
+
+pdf("dating_tracts_sims_v2_nls.pdf", width = 12, height = 8)
 
 results_v2 <- list()
 
@@ -508,7 +613,6 @@ for (min_length in c(0, 50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
     theme(legend.position = "none", text = element_text(size = 15)) +
     facet_wrap(~ sample_age, labeller = labeller(sample_age = function(x) paste("sample age =", x, "kya")))
   
-  r <- 1e-8
   m <- 0.03
 
   fit_df <- lapply(unique(age_bins$sample_age),
@@ -562,6 +666,10 @@ inner_join(
   .$equal %>%
   all()
 ```
+
+
+
+
 
 
 
