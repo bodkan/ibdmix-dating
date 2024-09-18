@@ -680,12 +680,12 @@ inner_join(
 
 
 
-### v3 estimate
+### Individual-based NLS estimates
 
 ```{r}
 min_length <- 0e3
 
-results_v3 <- list()
+results_ind <- list()
 
 max_length <- Inf
 
@@ -720,10 +720,11 @@ for (i in seq_along(all_inds)) {
     theme(legend.position = "none", text = element_text(size = 15),
           axis.text.x = element_text(hjust = 1, angle = 45))
   
-  bin_data <- hist(ind_tracts_df$length, plot = FALSE, breaks = 100)
-  density <- bin_data$density
-  length <- bin_data$mids[density > 0]
+  bin_data <- hist(ind_tracts_df$length, plot = FALSE, breaks = 101)
+  density <- bin_data$density[-1]
+  length <- bin_data$mids[-1][density > 0]
   density <- density[density > 0]
+  data_df <- tibble(length, density)
 
   r <- 1e-8
   m <- 0.03
@@ -731,19 +732,24 @@ for (i in seq_along(all_inds)) {
   # nls estimate -- computing the rate of decay (lambda) by fitting an exponential curve directly
   # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp 
   nls_res <- tryCatch(
-    nls(density ~ SSasymp(length, Asym, R0, lrc)),
+    nls(density ~ SSasymp(length, Asym, R0, lrc)), data = data_df,
     error = function(e) NA, warning = function(w) NA
   )
   failed_nls <- !inherits(nls_res, "nls")
-  lambda_nls <- if (failed_nls) NA else exp(unname(coef(nls_res)["lrc"]))
-  t_gens_before <- lambda_nls / r
+  lambda <- if (failed_nls) 1 / mean(ind_tracts_df$length) else exp(unname(coef(nls_res)["lrc"]))
+  t_gens_before <- lambda / ((1 - m) * r) + 1
   t_inferred <- t_gens_before * gen_time + sample_age
   
   x_values <- sort(unique(c(length, seq(0, max(ind_tracts_df$length), by = 5000))))
-  y_nls <- if (failed_nls) NA else predict(nls_res, newdata = data.frame(length = x_values + min_length))
-  predictions_df <- tibble(length = x_values, density = y_nls)
+  y_values <- if (failed_nls) dexp(x_values, rate = lambda) else predict(nls_res, newdata = data.frame(length = x_values + min_length))
+  predictions_df <- tibble(length = x_values, density = y_values)
 
-  ind_df <- tibble(name = ind, sample_age = sample_age, t_inferred = t_inferred, min_length = min_length)
+  ind_df <- tibble(
+    name = ind, sample_age = sample_age, t_inferred = t_inferred, min_length = min_length,
+    method = ifelse(failed_nls, "MLE", "NLS"),
+    data = list(data_df),
+    fit = list(predictions_df)
+  )
 
   p_fit <- p_tracts +
     geom_line(data = predictions_df, aes(x = length + min_length, y = density),
@@ -752,18 +758,36 @@ for (i in seq_along(all_inds)) {
               aes(x = Inf, y = Inf,
                   label = paste0(
                     "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
-                    "(", round(t_gens_before), " generations prior)"
+                    "(", round(t_gens_before), " generations prior)\n",
+                    ifelse(failed_nls, "MLE estimate", "NLS estimate")
                   )),
               hjust = 1.1, vjust = 2, size = 4)
   
   print(p_fit)
 
-  results_v3[[length(results_v3) + 1]] <- ind_df
+  results_ind[[length(results_ind) + 1]] <- ind_df
 }
 
 dev.off()
 
-results_v3_df <- do.call(rbind, results_v3)
+results_ind_df <- do.call(rbind, results_ind)
+```
+
+```{r}
+results_ind_df %>%
+ggplot(aes(factor(sample_age), t_inferred, group = sample_age)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.5) +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  geom_hline(yintercept = 55e3, linetype = "dashed", color = "red")
+```
+
+```{r}
+results_ind_df %>%
+unnest(fit) %>%
+ggplot(aes(length, density, group = name)) +
+  geom_line() +
+  facet_wrap(~ sample_age)
 ```
 
 ```{r}
