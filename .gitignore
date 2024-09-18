@@ -2,3 +2,6 @@
 .DS_Store
 .*.swp
 data/dating_model/__pycache__
+data/dating.trees
+data/info_gt.tsv.gz
+data/info_gt_unpol.tsv.gz
