@@ -791,6 +791,17 @@ ggplot(aes(length, density, group = name)) +
 ```
 
 ```{r}
+name <- "EUR_1"
+
+tracts_df %>%
+  filter(name == !!name) %>%
+  ggplot() +
+  geom_rect(aes(xmin = left, xmax = right, ymin = 0, ymax = 1)) +
+  facet_wrap(~ node_id, nrow = 2,
+             labeller = labeller(node_id = function(x) paste0("individual '", name, "', haplotype #", x)))
+```
+
+```{r}
 x_df <- inner_join(results_v3_df, metadata, by = c("name" = "sampleId", "sample_age" = "ageAverage")) %>%
   mutate(cluster = case_when(t_inferred < 48000 ~ "x", t_inferred > 52000 ~ "y", TRUE ~ "z"))
 
