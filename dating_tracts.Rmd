@@ -251,9 +251,9 @@ ggplot() +
 
 max_length <- Inf
 
-results <- list()
+results_v1 <- list()
 
-pdf("dating_tracts_sims.pdf", width = 14, height = 8)
+pdf("dating_tracts_sims_v1.pdf", width = 14, height = 8)
 
 for (min_length in c(0, 50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
 
@@ -380,7 +380,7 @@ for (min_length in c(0, 50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
     rmse_mean2 <- rmse(density, y_mean2[fitted_idx])
     rmse_nls <- rmse(density, y_nls[fitted_idx])
     
-    results[[length(results) + 1]] <- tibble(
+    results_v1[[length(results_v1) + 1]] <- tibble(
       sample_age = sample_age,
       min_length = min_length,
       method = c("lm", "lm (weighted)", "approx. MLE", "MLE", "nls"),
@@ -395,11 +395,11 @@ for (min_length in c(0, 50e3, 100e3, 150e3, 200e3, 250e3, 300e3)) {
 
 dev.off()
 
-results_df <- do.call(rbind, results)
+results_v1_df <- do.call(rbind, results_v1)
 ```
 
 ```{r}
-p_density <- results_df %>%
+p_density <- results_v1_df %>%
   ggplot(aes(as.factor(sample_age), rmse_density, color = method)) +
     geom_point() +
     geom_line(aes(group = method)) +
@@ -410,7 +410,7 @@ p_density <- results_df %>%
     facet_wrap(~ min_length, nrow = 1,
                labeller = labeller(min_length = function(x) paste("minimum segment length =", as.integer(x) / 1e3, "kb")))
 
-p_time <- results_df %>%
+p_time <- results_v1_df %>%
   ggplot(aes(as.factor(sample_age), ratio_time, color = method)) +
     geom_point() +
     geom_line(aes(group = method)) +
@@ -429,7 +429,7 @@ cowplot::plot_grid(p_density, p_time, nrow = 2)
 **Note:** The stricter the minimum length cutoff, the higher the RMSE of a fit against the real data, and this is worse the younger the sample is. This is because young samples have the highest proportion of very short tracts (and very few longer tracts), so the exponential decay data is actually the noisiest, and the fit is necessarily poorer. It's the opposite for the oldest samples, which have much fewer short tracts (so the distribution is less affected by filtering for minimum length) and many more longer tracts (which are not affected by filtering at all).
 
 ```{r}
-p_density2 <- results_df %>%
+p_density2 <- results_v1_df %>%
   ggplot(aes(method, rmse_density)) +
   geom_boxplot(aes(color = method)) +
   geom_jitter() +
@@ -441,7 +441,7 @@ p_density2 <- results_df %>%
     labeller = labeller(min_length = function(x) paste("minimum tract length =", as.integer(x) / 1e3, "kb"))
   )
 
-p_time2 <- results_df %>%
+p_time2 <- results_v1_df %>%
   ggplot(aes(method, ratio_time)) +
   geom_boxplot(aes(color = method)) +
   geom_jitter() +
@@ -683,7 +683,7 @@ inner_join(
 ### Individual-based NLS estimates
 
 ```{r}
-min_length <- 0e3
+min_length <- 50e3
 
 results_ind <- list()
 
@@ -779,15 +779,9 @@ ggplot(aes(factor(sample_age), t_inferred, group = sample_age)) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(alpha = 0.5) +
   coord_cartesian(ylim = c(0, 100e3)) +
-  geom_hline(yintercept = 55e3, linetype = "dashed", color = "red")
-```
-
-```{r}
-results_ind_df %>%
-unnest(fit) %>%
-ggplot(aes(length, density, group = name)) +
-  geom_line() +
-  facet_wrap(~ sample_age)
+  geom_hline(yintercept = 55e3, linetype = "dashed", color = "red") +
+  labs(x = "sample age group", y = "inferred admixture time",
+       title = "Inferred admixture time in different sample groups")
 ```
 
 ```{r}
@@ -801,16 +795,18 @@ tracts_df %>%
              labeller = labeller(node_id = function(x) paste0("individual '", name, "', haplotype #", x)))
 ```
 
-```{r}
-x_df <- inner_join(results_v3_df, metadata, by = c("name" = "sampleId", "sample_age" = "ageAverage")) %>%
-  mutate(cluster = case_when(t_inferred < 48000 ~ "x", t_inferred > 52000 ~ "y", TRUE ~ "z"))
 
-{ x_df %>%
-  ggplot() +
-  geom_point(aes(sample_age, t_inferred, color = cluster)) +
-  coord_cartesian(ylim = c(0, 100e3)) } %>%
-  ggplotly()
-```
+
+<!-- ```{r} -->
+<!-- x_df <- inner_join(results_v3_df, metadata, by = c("name" = "sampleId", "sample_age" = "ageAverage")) %>% -->
+<!--   mutate(cluster = case_when(t_inferred < 48000 ~ "x", t_inferred > 52000 ~ "y", TRUE ~ "z")) -->
+
+<!-- { x_df %>% -->
+<!--   ggplot() + -->
+<!--   geom_point(aes(sample_age, t_inferred, color = cluster)) + -->
+<!--   coord_cartesian(ylim = c(0, 100e3)) } %>% -->
+<!--   ggplotly() -->
+<!-- ``` -->
 
 
 
