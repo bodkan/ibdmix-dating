@@ -543,7 +543,7 @@ results_v2_mle_df <- do.call(rbind, results_v2_mle)
 
 ```{r}
 inner_join(
-  filter(results_df, method == "MLE") %>% select(sample_age, min_length, t_inferred),
+  filter(results_v1_df, method == "MLE") %>% select(sample_age, min_length, t_inferred),
   select(results_v2_mle_df, sample_age, min_length, t_inferred),
   by = c("sample_age", "min_length")
 ) %>%
@@ -658,7 +658,7 @@ results_v2_nls_df <- do.call(rbind, results_v2_nls)
 
 ```{r}
 inner_join(
-  filter(results_df, method == "nls") %>% select(sample_age, min_length, t_inferred),
+  filter(results_v1_df, method == "nls") %>% select(sample_age, min_length, t_inferred),
   select(results_v2_nls_df, sample_age, min_length, t_inferred),
   by = c("sample_age", "min_length")
 ) %>%
@@ -785,7 +785,7 @@ ggplot(aes(factor(sample_age), t_inferred, group = sample_age)) +
 ```
 
 ```{r}
-name <- "EUR_1"
+name <- "EUR_10"
 
 tracts_df %>%
   filter(name == !!name) %>%
@@ -925,8 +925,8 @@ ggplot(tracts_df) +
 
 ```{r}
 # age_group <- "present-day"
-# min_length <- 50e3
 
+min_length <- 50e3
 max_length <- Inf
 
 results_v1 <- list()
@@ -942,7 +942,7 @@ for (age_group in sort(unique(tracts_df$age_group))) {
   
   filtered_tracts <- tracts_df %>% filter(age_group == !!age_group, length >= min_length, length <= max_length)
   
-  sample_age <- filtered_tracts$sample_age %>% mean %>% round
+  sample_age <- filtered_tracts$sample_age %>% mean %>% round %>% as.integer
 
   # bin the tracts, discarding the very first bin due to very frequent bining artifacts
   # (the lowest bin being extremely small, misrepresenting the true distribution of the data)
@@ -1056,8 +1056,8 @@ for (age_group in sort(unique(tracts_df$age_group))) {
   rmse_nls <- rmse(density, y_nls[fitted_idx])
   
   results_v1[[length(results_v1) + 1]] <- tibble(
-    sample_age = sample_age,
-    min_length = min_length,
+    sample_age = as.integer(sample_age),
+    min_length = as.integer(min_length),
     method = c("lm", "lm (weighted)", "approx. MLE", "MLE", "nls"),
     lambda = c(lambda_lm, lambda_lmw, lambda_mean1, lambda_mean2, lambda_nls),
     rmse_density = c(rmse_lm, rmse_lmw, rmse_mean1, rmse_mean2, rmse_nls),
@@ -1100,35 +1100,231 @@ p_time <- results_v1_df %>%
 cowplot::plot_grid(p_density, p_time, nrow = 2)
 ```
 
-**Note:** The stricter the minimum length cutoff, the higher the RMSE of a fit against the real data, and this is worse the younger the sample is. This is because young samples have the highest proportion of very short tracts (and very few longer tracts), so the exponential decay data is actually the noisiest, and the fit is necessarily poorer. It's the opposite for the oldest samples, which have much fewer short tracts (so the distribution is less affected by filtering for minimum length) and many more longer tracts (which are not affected by filtering at all).
+
+
+
+
+
+
+
+
+### v2 (MLE) estimate
 
 ```{r}
-p_density2 <- results_v1_df %>%
-  ggplot(aes(method, rmse_density)) +
-  geom_boxplot(aes(color = method)) +
-  geom_jitter() +
-  expand_limits(y = 0) +
-  theme_bw() +
-  theme(text = element_text(size = 15)) +
-  facet_wrap(
-    ~ min_length, nrow = 1,
-    labeller = labeller(min_length = function(x) paste("minimum tract length =", as.integer(x) / 1e3, "kb"))
-  )
+# min_length <- 50e3
 
-p_time2 <- results_v1_df %>%
-  ggplot(aes(method, ratio_time)) +
-  geom_boxplot(aes(color = method)) +
-  geom_jitter() +
-  geom_hline(yintercept = 1, linetype = "dashed") +
-  theme_bw() +
-  theme(text = element_text(size = 15)) +
-  facet_wrap(
-    ~ min_length, nrow = 1,
-    labeller = labeller(min_length = function(x) paste("minimum tract length =", as.integer(x) / 1e3, "kb"))
-  )
+pdf("dating_tracts_empirical_v2_mle.pdf", width = 12, height = 8)
 
-cowplot::plot_grid(p_density2, p_time2, nrow = 2)
+results_v2_mle <- list()
+
+max_length <- Inf
+
+for (min_length in c(50e3)) {
+  tracts_filt_df <- tracts_df %>% filter(length >= min_length, length <= max_length)
+
+  p_tracts <-
+    ggplot() +
+    geom_histogram(
+      data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(age_group)),
+      binwidth = 10000, alpha = 0.75) +
+    # geom_density(
+    #   data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    #   bw = 5000, alpha = 0.75, color = FALSE) +
+    labs(
+      x = "tract length [bp]", y = "density", fill = "age of sample",
+      title = "Tract length distribution as a function of admixed sample's age",
+      subtitle = paste0(
+        "(assuming single-pulse admixture at ~ 55 kya, tract length [",
+        as.integer(min_length / 1e3), " kb, ", max_length / 1e6," Mb])"
+      )
+    ) +
+    scale_x_continuous(labels = scales::comma) +
+    expand_limits(y = 0, x = 0) +
+    coord_cartesian(ylim = c(0, 2e-5)) +
+    theme_minimal() +
+    theme(legend.position = "none", text = element_text(size = 15)) +
+    facet_wrap(~ age_group, labeller = labeller(age_group = function(x) paste("sample age =", x, "kya")))
+  
+  r <- 1e-8
+  m <- 0.03
+  
+  exp_df <- group_by(tracts_filt_df, age_group) %>%
+    summarise(L = mean(length), sample_age = as.integer(round(mean(sample_age)))) %>%
+    mutate(
+      lambda = 1 / (L - min_length),
+      t_gen = lambda / ((1 - m) * r) + 1,
+      t_before = t_gen * gen_time,
+      t_inferred = t_before + sample_age
+    )
+  
+  exp_decay <- function(lambda, max) {
+    data.frame(length = seq(0, max, by = 1000)) %>%
+      mutate(density = dexp(length, rate = lambda))
+  }
+  
+  predictions_df <-
+    exp_df %>%
+    select(age_group, lambda) %>%
+    rowwise() %>%
+    mutate(exp_data = list(exp_decay(lambda, max(tracts_filt_df$length)))) %>%
+    unnest(cols = c(exp_data)) %>%
+    select(-lambda)
+  
+  p_fit <- p_tracts +
+    geom_line(data = predictions_df, aes(x = length + min_length, y = density),
+              linetype = "dashed", linewidth = 0.75, color = "black") +
+    geom_text(data = exp_df,
+              aes(x = Inf, y = Inf, color = age_group,
+                  label = paste0(
+                    "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+                    "(", round(t_gen), " generations prior)"
+                  )),
+              hjust = 1.2, vjust = 3, size = 4)
+  
+  print(p_fit)
+  
+  results_v2_mle[[length(results_v2_mle) + 1]] <- exp_df %>% mutate(min_length = as.integer(min_length))
+}
+
+dev.off()
+
+results_v2_mle_df <- do.call(rbind, results_v2_mle)
 ```
+
+```{r}
+inner_join(
+  filter(results_v1_df, method == "MLE") %>% select(sample_age, min_length, t_inferred),
+  select(results_v2_mle_df, sample_age, min_length, t_inferred),
+  by = c("sample_age", "min_length")
+) %>%
+  mutate(equal = t_inferred.x == t_inferred.y) %>%
+  .$equal %>%
+  all()
+```
+
+
+
+
+
+
+
+
+
+### v2 (NLS) estimate
+
+```{r}
+# min_length <- 50e3
+
+pdf("dating_tracts_empirical_v2_nls.pdf", width = 12, height = 8)
+
+results_v2_nls <- list()
+
+max_length <- Inf
+
+for (min_length in c(50e3)) {
+  tracts_filt_df <- tracts_df %>% filter(length >= min_length, length <= max_length)
+    
+  age_bins <-
+    tibble(age_group = sort(unique(tracts_filt_df$age_group))) %>%
+    mutate(bins = lapply(age_group, function(x) {
+      # bin the tracts, discarding the very first bin due to very frequent bining artifacts
+      # (the lowest bin being extremely small, misrepresenting the true distribution of the data)
+      bin_data <- hist(filter(tracts_filt_df, age_group == x)$length, plot = FALSE, breaks = 101)
+      density <- bin_data$density
+      length <- bin_data$mids[density > 0]
+      density <- density[density > 0]
+      tibble(length, density)
+    })) %>% unnest(bins)
+
+  p_tracts <-
+    ggplot() +
+    geom_histogram(
+      data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(age_group)),
+      binwidth = 10000, alpha = 0.75) +
+    # geom_density(
+    #   data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    #   bw = 5000, alpha = 0.75, color = FALSE) +
+    labs(
+      x = "tract length [bp]", y = "density", fill = "age of sample",
+      title = "Tract length distribution as a function of admixed sample's age",
+      subtitle = paste0(
+        "(assuming single-pulse admixture at ~ 55 kya, tract length [",
+        as.integer(min_length / 1e3), " kb, ", max_length / 1e6," Mb])"
+      )
+    ) +
+    scale_x_continuous(labels = scales::comma) +
+    expand_limits(y = 0, x = 0) +
+    coord_cartesian(ylim = c(0, 2e-5)) +
+    theme_minimal() +
+    theme(legend.position = "none", text = element_text(size = 15)) +
+    facet_wrap(~ age_group, labeller = labeller(age_group = function(x) paste("sample age: ", x, "kya")))
+  
+  m <- 0.03
+
+  fit_df <- lapply(sort(unique(age_bins$age_group)),
+      function(x) {
+        sample_age <- filter(tracts_filt_df, age_group == x)$sample_age %>% mean %>% as.integer
+        bin_df <- filter(age_bins, age_group == x)
+        nls_res <- tryCatch(
+          nls(density ~ SSasymp(length, Asym, R0, lrc), data = bin_df),
+          error = function(e) NA, warning = function(w) NA
+        )
+        failed_nls <- !inherits(nls_res, "nls")
+        lambda_nls <- if (failed_nls) NA else exp(unname(coef(nls_res)["lrc"]))
+        t_gens_nls <- lambda_nls / ((1 - m) * r) + 1
+        t_nls <- t_gens_nls * gen_time + sample_age
+        y_nls <- if (failed_nls) NA else predict(nls_res, newdata = data.frame(length = x_values + min_length))
+        tibble(sample_age = sample_age,
+               age_group = x,
+               t_inferred = t_nls,
+               t_gen = t_gens_nls,
+               fit = list(tibble(length = x_values + min_length, density = y_nls)))
+      }
+    ) %>% do.call(rbind, .)
+  
+  p_fit <- p_tracts +
+    geom_line(data = unnest(fit_df, fit), aes(x = length, y = density), linetype = "dashed") +
+    geom_text(data = fit_df,
+              aes(x = Inf, y = Inf, color = as.factor(age_group),
+                  label = paste0(
+                    "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+                    "(", round(t_gen), " generations prior)"
+                  )),
+              hjust = 1.2, vjust = 3, size = 4)
+  
+
+
+  print(p_fit)
+  
+  results_v2_nls[[length(results_v2_nls) + 1]] <- fit_df %>% mutate(min_length = min_length)
+}
+
+dev.off()
+
+results_v2_nls_df <- do.call(rbind, results_v2_nls)
+```
+
+```{r}
+inner_join(
+  filter(results_v1_df, method == "nls") %>% select(sample_age, min_length, t_inferred),
+  select(results_v2_nls_df, sample_age, min_length, t_inferred),
+  by = c("sample_age", "min_length")
+) %>%
+  mutate(equal = t_inferred.x == t_inferred.y) %>%
+  .$equal %>%
+  all()
+```
+
+
+
+
+
+
+
+
+
+
+
 
 
 
