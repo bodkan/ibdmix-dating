@@ -1415,6 +1415,15 @@ results_ind_df <- do.call(rbind, results_ind)
 ```
 
 ```{r}
+saveRDS(results_ind_df, "dating_tracts_empirical_inds.rds")
+```
+
+```{r}
+results_ind_df <- readRDS("dating_tracts_empirical_inds.rds")
+```
+
+
+```{r}
 results_ind_df %>%
 ggplot(aes(age_group, t_inferred, color = age_group, group = name)) +
   geom_jitter(alpha = 0.75) +
