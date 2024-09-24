@@ -1321,7 +1321,7 @@ inner_join(
 ```{r}
 min_length <- 50e3
 
-results_ind_bp <- list()
+results_ind <- list()
 
 max_length <- Inf
 
@@ -1406,16 +1406,16 @@ for (i in seq_along(all_inds)) {
   
   print(p_fit)
 
-  results_ind_bp[[length(results_ind_bp) + 1]] <- ind_df
+  results_ind[[length(results_ind) + 1]] <- ind_df
 }
 
 dev.off()
 
-results_ind_bp_df <- do.call(rbind, results_ind_bp)
+results_ind_df <- do.call(rbind, results_ind)
 ```
 
 ```{r}
-results_ind_bp_df %>%
+results_ind_df %>%
 ggplot(aes(age_group, t_inferred, color = age_group, group = name)) +
   geom_jitter(alpha = 0.75) +
   coord_cartesian(ylim = c(0, 150e3)) +
@@ -1427,7 +1427,7 @@ ggplot(aes(age_group, t_inferred, color = age_group, group = name)) +
 ```
 
 ```{r}
-results_ind_bp_df %>%
+results_ind_df %>%
 ggplot(aes(sample_age, t_inferred)) +
   geom_jitter(alpha = 0.5) +
   coord_cartesian(ylim = c(0, 150e3)) +
@@ -1449,7 +1449,7 @@ p_ind_tracts <- tracts_df %>%
   expand_limits(x = 0) +
   facet_wrap(~ chrom, scales = "free_x")
 
-ind_df <- filter(results_ind_bp_df, name == !!name)
+ind_df <- filter(results_ind_df, name == !!name)
 
 p_ind_fit <- ggplot() +
   geom_point(data = unnest(ind_df, data), aes(length, density)) +
