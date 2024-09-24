@@ -17,7 +17,7 @@ knitr::opts_chunk$set(
 set.seed(42)
 
 unlink("dating_tracts_files", recursive = TRUE)
-unlink(c("dating_tracts.*.pdf", "dating.trees", "data/sim_tracts.tsv", "data/dating.trees"), recursive = TRUE)
+unlink("dating_tracts.*.pdf", recursive = TRUE)
 ```
 
 ```{r}
@@ -1321,30 +1321,35 @@ inner_join(
 ```{r}
 min_length <- 50e3
 
-results_ind <- list()
-
 max_length <- Inf
+
+results_ind_breaks <- list()
 
 all_inds <- tracts_df %>% arrange(-sample_age) %>% pull(name) %>% unique
 
-pdf("dating_tracts_empirical_inds.pdf", width = 12, height = 8)
+for (breaks in c(100, 250, 500, 1000)) {
+
+results_ind <- list()
+
+pdf(paste0("dating_tracts_empirical_inds_breaks", breaks, ".pdf"), width = 12, height = 8)
 
 for (i in seq_along(all_inds)) {
   ind <- all_inds[i]
-  # cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
+  cat(sprintf("Processing individual %s [%d/%d] (breaks %d)\n", ind, i, length(all_inds), breaks))
 
   ind_tracts_df <- filter(tracts_df, length >= min_length, name == ind)
   sample_age <- unique(ind_tracts_df$sample_age)
   age_group <- unique(ind_tracts_df$age_group)
 
+  bin_data <- hist(ind_tracts_df$length, plot = FALSE, breaks = breaks)
+  density <- bin_data$density[-1]
+  length <- bin_data$mids[-1][density > 0]
+  density <- density[density > 0]
+  data_df <- tibble(length, density)
+
   p_tracts <-
     ggplot() +
-    geom_histogram(
-      data = ind_tracts_df, aes(x = length, y = after_stat(density)),
-      binwidth = 10000, alpha = 0.75) +
-    # geom_density(
-    #   data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
-    #   bw = 5000, alpha = 0.75, color = FALSE) +
+    geom_bar(data = data_df, aes(x = length, y = density), alpha = 0.75, stat = "identity") +
     labs(
       x = "tract length [bp]", y = "density", fill = "age of sample",
       title = "Distribution of introgressed tracts",
@@ -1352,16 +1357,10 @@ for (i in seq_along(all_inds)) {
     ) +
     scale_x_continuous(labels = scales::comma) +
     expand_limits(y = 0, x = 0) +
-    coord_cartesian(xlim = c(0, 2e6), ylim = c(0, 2e-5)) +
+    coord_cartesian(xlim = c(0, 2e6)) +
     theme_minimal() +
     theme(legend.position = "none", text = element_text(size = 15),
           axis.text.x = element_text(hjust = 1, angle = 45))
-  
-  bin_data <- hist(ind_tracts_df$length, plot = FALSE, breaks = 101)
-  density <- bin_data$density[-1]
-  length <- bin_data$mids[-1][density > 0]
-  density <- density[density > 0]
-  data_df <- tibble(length, density)
 
   r <- 1e-8
   m <- 0.03
@@ -1369,7 +1368,7 @@ for (i in seq_along(all_inds)) {
   # nls estimate -- computing the rate of decay (lambda) by fitting an exponential curve directly
   # https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/SSasymp 
   nls_res <- tryCatch(
-    nls(density ~ SSasymp(length, Asym, R0, lrc)), data = data_df,
+    nls(density ~ SSasymp(length, Asym, R0, lrc), data = data_df),
     error = function(e) NA, warning = function(w) NA
   )
   # failed_nls <- !inherits(nls_res, "nls")
@@ -1411,7 +1410,8 @@ for (i in seq_along(all_inds)) {
 
 dev.off()
 
-results_ind_df <- do.call(rbind, results_ind)
+results_ind_breaks[[breaks]] <- do.call(rbind, results_ind)
+}
 ```
 
 ```{r}
@@ -1466,10 +1466,12 @@ p_ind_fit <- ggplot() +
   geom_text(data = ind_df, aes(x = Inf, y = Inf,
               label = paste0(
                 "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
-                "(", round(t_before), " generations prior)\n",
-                ifelse(failed_nls, "MLE estimate", "NLS estimate")
+                "(", round(t_before), " generations prior)\n"
+                # , ifelse(failed_nls, "MLE estimate", "NLS estimate")
               )),
           hjust = 1.1, vjust = 2, size = 4) +
+  scale_x_continuous(labels = scales::comma) +
+  coord_cartesian(xlim = c(0, 5e6)) +
   labs(
     x = "tract length [bp]", y = "density", fill = "age of sample",
     title = "Distribution of introgressed tracts",
