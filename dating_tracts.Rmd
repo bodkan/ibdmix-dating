@@ -695,7 +695,7 @@ pdf("dating_tracts_sim_inds.pdf", width = 12, height = 8)
 
 for (i in seq_along(all_inds)) {
   ind <- all_inds[i]
-  cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
+  # cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
 
   ind_tracts_df <- filter(tracts_df, length >= min_length, name == ind)
   sample_age <- ind_tracts_df$sample_age[1]
@@ -1331,7 +1331,7 @@ pdf("dating_tracts_empirical_inds.pdf", width = 12, height = 8)
 
 for (i in seq_along(all_inds)) {
   ind <- all_inds[i]
-  cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
+  # cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
 
   ind_tracts_df <- filter(tracts_df, length >= min_length, name == ind)
   sample_age <- unique(ind_tracts_df$sample_age)
