@@ -410,9 +410,27 @@ read_recmap <- function(path) {
     stop("Path '", path, "' does not exist", call. = FALSE)
 
   files <- list.files(path, "plink.chr\\d+.*.map", full.names = TRUE)
-  lapply(files, function(f) readr::read_tsv(f, col_names = c("chrom", "_", "posg", "pos"))) %>%
+  lapply(files, function(f) readr::read_tsv(f, col_names = c("chrom", "_", "posg", "pos"),
+                                            show_col_types = FALSE)) %>%
     do.call(rbind, .) %>%
     mutate(chrom = paste0("chr", chrom))
+}
+
+read_recmap2 <- function(path, cumulative = TRUE) {
+  if (!dir.exists(path))
+    stop("Path '", path, "' does not exist", call. = FALSE)
+
+  files <- list.files(path, ".*_recombination_map_hg19_chr_\\d+.bed", full.names = TRUE)
+  lapply(files, function(f) {
+    df <- read_tsv(f, show_col_types = FALSE) %>% setNames(c("chrom", "start", "end", "rate"))
+    if (cumulative) {
+      df <- rbind(tibble(chrom = df[1, ]$chrom, start = 0, end = df[1, ]$start, rate = 0), df) %>%
+        mutate(posg = cumsum((end - start) * rate * 100)) %>%
+        select(chrom, posg, pos = end)
+    } else
+      df <- mutate(df, length = end - start) %>% select(chrom, start, end, length, rate)
+    df
+  }) %>% do.call(rbind, .)
 }
 
 convert_genetic <- function(recmap, df, cols, chrom = "chrom") {
