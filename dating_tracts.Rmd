@@ -1327,7 +1327,8 @@ results_ind_breaks <- list()
 
 all_inds <- tracts_df %>% arrange(-sample_age) %>% pull(name) %>% unique
 
-for (breaks in c(100, 250, 500, 1000)) {
+# for (breaks in c(10, 25, 100, 250, 500, 1000)) {
+for (breaks in c(101)) {
 
 results_ind <- list()
 
@@ -1371,22 +1372,22 @@ for (i in seq_along(all_inds)) {
     nls(density ~ SSasymp(length, Asym, R0, lrc), data = data_df),
     error = function(e) NA, warning = function(w) NA
   )
-  # failed_nls <- !inherits(nls_res, "nls")
-  # lambda <- if (failed_nls) 1 / mean(ind_tracts_df$length) else exp(unname(coef(nls_res)["lrc"]))
-  lambda <- exp(unname(coef(nls_res)["lrc"]))
+  failed_nls <- !inherits(nls_res, "nls")
+  lambda <- if (failed_nls) 1 / mean(ind_tracts_df$length) else exp(unname(coef(nls_res)["lrc"]))
+  # lambda <- exp(unname(coef(nls_res)["lrc"]))
   t_gens_before <- lambda / ((1 - m) * r) + 1
   t_inferred <- t_gens_before * gen_time + sample_age
   
   x_values <- sort(unique(c(length, seq(0, max(ind_tracts_df$length), by = 5000))))
-  # y_values <- if (failed_nls) dexp(x_values, rate = lambda) else predict(nls_res, newdata = data.frame(length = x_values + min_length))
-  y_values <- predict(nls_res, newdata = data.frame(length = x_values + min_length))
+  y_values <- if (failed_nls) dexp(x_values, rate = lambda) else predict(nls_res, newdata = data.frame(length = x_values + min_length))
+  # y_values <- predict(nls_res, newdata = data.frame(length = x_values + min_length))
   predictions_df <- tibble(length = x_values, density = y_values)
 
   ind_df <- tibble(
     name = ind, sample_age = sample_age, t_before = t_gens_before,
     t_inferred = t_inferred, min_length = min_length,
     age_group = age_group,
-    # method = ifelse(failed_nls, "MLE", "NLS"),
+    method = ifelse(failed_nls, "MLE", "NLS"),
     data = list(data_df),
     fit = list(predictions_df)
   )
@@ -1398,20 +1399,22 @@ for (i in seq_along(all_inds)) {
               aes(x = Inf, y = Inf,
                   label = paste0(
                     "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
-                    "(", round(t_gens_before), " generations prior)\n"
-                    #, ifelse(failed_nls, "MLE estimate", "NLS estimate")
+                    "(", round(t_gens_before), " generations prior)\n",
+                    ifelse(failed_nls, "MLE estimate", "NLS estimate")
                   )),
               hjust = 1.1, vjust = 2, size = 4)
   
   print(p_fit)
 
-  results_ind[[length(results_ind) + 1]] <- ind_df
+  results_ind[[length(results_ind) + 1]] <- ind_df %>% mutate(breaks = breaks)
 }
 
 dev.off()
 
 results_ind_breaks[[breaks]] <- do.call(rbind, results_ind)
 }
+
+results_ind_df <- do.call(rbind, results_ind_breaks)
 ```
 
 ```{r}
@@ -1422,7 +1425,6 @@ saveRDS(results_ind_df, "dating_tracts_empirical_inds.rds")
 results_ind_df <- readRDS("dating_tracts_empirical_inds.rds")
 ```
 
-
 ```{r}
 results_ind_df %>%
 ggplot(aes(age_group, t_inferred, color = age_group, group = name)) +
@@ -1432,7 +1434,8 @@ ggplot(aes(age_group, t_inferred, color = age_group, group = name)) +
   theme(axis.text.x = element_text(hjust = 1, angle = 45)) +
   labs(x = "sample age group", y = "inferred admixture time",
        title = "Inferred admixture time in different sample groups",
-       subtitle = "(Each dot is a single individual; assuming 27 years per generation)")
+       subtitle = "(Each dot is a single individual; assuming 27 years per generation)") +
+  facet_wrap(~ breaks)
 ```
 
 ```{r}
@@ -1443,12 +1446,14 @@ ggplot(aes(sample_age, t_inferred)) +
   theme(legend.position = "none") +
   theme(axis.text.x = element_text(hjust = 1, angle = 45)) +
   labs(x = "sample age", y = "inferred admixture time",
-       title = "Inferred admixture time vs sample time")
+       title = "Inferred admixture time vs sample time") +
+  facet_wrap(~ breaks)
 ```
 
 ```{r}
 name <- "HG00113"
 name <- "NEO283"
+name <- "kls001"
 name <- "Kostenki"
 
 p_ind_tracts <- tracts_df %>%
@@ -1476,7 +1481,8 @@ p_ind_fit <- ggplot() +
     x = "tract length [bp]", y = "density", fill = "age of sample",
     title = "Distribution of introgressed tracts",
     subtitle = paste0("name: ", name, ", date: ", unique(ind_df$sample_age)," years BP")
-  ) 
+  )  +
+  facet_wrap(~ breaks)
 
 cowplot::plot_grid(p_ind_tracts, p_ind_fit, nrow = 1)
 ```
