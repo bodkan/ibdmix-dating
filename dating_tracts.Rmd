@@ -1343,9 +1343,18 @@ for (i in seq_along(all_inds)) {
   age_group <- unique(ind_tracts_df$age_group)
 
   bin_data <- hist(ind_tracts_df$length, plot = FALSE, breaks = breaks)
-  density <- bin_data$density[-1]
-  length <- bin_data$mids[-1][density > 0]
-  density <- density[density > 0]
+  density <- bin_data$density
+  length <- bin_data$mids
+
+  # bin the tracts, discarding the very first bin due to very frequent bining artifacts
+  # (the lowest bin being extremely small, misrepresenting the true distribution of the data)
+  if (density[1] < density[2]) {
+    density <- density[-1]
+    length <- length[-1]
+  }
+  not_empty <- density > 0
+  length <- length[not_empty]
+  density <- density[not_empty]
   data_df <- tibble(length, density)
 
   p_tracts <-
