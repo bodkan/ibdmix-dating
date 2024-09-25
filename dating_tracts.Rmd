@@ -678,9 +678,131 @@ inner_join(
 
 
 
+### Individual MLE estimates
+
+```{r}
+min_length <- 50e3
+
+results_ind_mle <- list()
+
+max_length <- Inf
+
+all_inds <- tracts_df %>% arrange(-sample_age) %>% pull(name) %>% unique
+
+pdf("dating_tracts_sim_inds_v1_mle.pdf", width = 12, height = 8)
+
+for (i in seq_along(all_inds)) {
+  ind <- all_inds[i]
+  cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
+
+  ind_tracts_df <- filter(tracts_df, length >= min_length, name == ind)
+  sample_age <- ind_tracts_df$sample_age[1]
+
+  p_tracts <-
+    ggplot() +
+    geom_histogram(
+      data = ind_tracts_df, aes(x = length, y = after_stat(density)),
+      binwidth = 10000, alpha = 0.75) +
+    # geom_density(
+    #   data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    #   bw = 5000, alpha = 0.75, color = FALSE) +
+    labs(
+      x = "tract length [bp]", y = "density", fill = "age of sample",
+      title = "Distribution of introgressed tracts",
+      subtitle = paste0("name: ", ind, ", date: ", sample_age," years BP")
+    ) +
+    scale_x_continuous(labels = scales::comma) +
+    expand_limits(y = 0, x = 0) +
+    coord_cartesian(xlim = c(0, 2e6), ylim = c(0, 2e-5)) +
+    theme_minimal() +
+    theme(legend.position = "none", text = element_text(size = 15),
+          axis.text.x = element_text(hjust = 1, angle = 45))
+
+  r <- 1e-8
+  m <- 0.03
+  
+  exp_df <- group_by(ind_tracts_df, name) %>%
+    summarise(L = mean(length)) %>%
+    mutate(
+      sample_age = sample_age,
+      lambda = 1 / (L - min_length),
+      t_gen = lambda / ((1 - m) * r) + 1,
+      t_before = t_gen * gen_time,
+      t_inferred = t_before + sample_age
+    )
+  
+  exp_decay <- function(lambda, max) {
+    data.frame(length = seq(0, max, by = 1000)) %>%
+      mutate(density = dexp(length, rate = lambda))
+  }
+  
+  predictions_df <-
+    exp_df %>%
+    select(name, lambda) %>%
+    rowwise() %>%
+    mutate(exp_data = list(exp_decay(lambda, max(ind_tracts_df$length)))) %>%
+    unnest(cols = c(exp_data)) %>%
+    select(-lambda)
+  
+  p_fit <- p_tracts +
+    geom_line(data = predictions_df, aes(x = length + min_length, y = density),
+              linetype = "dashed", linewidth = 0.75, color = "black") +
+    geom_text(data = exp_df,
+              aes(x = Inf, y = Inf, color = as.factor(sample_age),
+                  label = paste0(
+                    "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+                    "(", round(t_gen), " generations prior)"
+                  )),
+              hjust = 1.2, vjust = 8, size = 4)
+  
+  print(p_fit)
+
+  results_ind_mle[[length(results_ind_mle) + 1]] <- exp_df %>% mutate(min_length = min_length)
+}
+
+dev.off()
+
+results_ind_mle_df <- do.call(rbind, results_ind_mle)
+```
+
+```{r}
+results_ind_mle_df %>%
+ggplot(aes(factor(sample_age), t_inferred, group = sample_age)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha = 0.5) +
+  coord_cartesian(ylim = c(0, 100e3)) +
+  geom_hline(yintercept = 55e3, linetype = "dashed", color = "red") +
+  labs(x = "sample age group", y = "inferred admixture time",
+       title = "Inferred admixture time in different sample groups")
+```
+
+```{r}
+name <- "EUR_1"
+
+tracts_df %>%
+  filter(name == !!name) %>%
+  ggplot() +
+  geom_rect(aes(xmin = left, xmax = right, ymin = 0, ymax = 1)) +
+  scale_x_continuous(labels = scales::comma) +
+  xlab("position along a chromosome [bp]") +
+  theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) +
+  facet_wrap(~ node_id, nrow = 2,
+             labeller = labeller(node_id = function(x) paste0("individual '", name, "', haplotype #", x)))
+```
 
 
-### Individual-based NLS estimates
+
+
+
+
+
+
+
+
+
+
+
+### Individual NLS estimates
 
 ```{r}
 min_length <- 50e3
@@ -691,7 +813,7 @@ max_length <- Inf
 
 all_inds <- tracts_df %>% arrange(-sample_age) %>% pull(name) %>% unique
 
-pdf("dating_tracts_sim_inds.pdf", width = 12, height = 8)
+pdf("dating_tracts_sim_inds_v2_nls.pdf", width = 12, height = 8)
 
 for (i in seq_along(all_inds)) {
   ind <- all_inds[i]
@@ -1316,22 +1438,192 @@ inner_join(
 
 
 
-### Individual-based NLS estimates
+### Individual MLE estimates
 
 ```{r}
 min_length <- 50e3
 
-results_ind <- list()
+results_ind_mle <- list()
 
 max_length <- Inf
 
 all_inds <- tracts_df %>% arrange(-sample_age) %>% pull(name) %>% unique
 
-pdf("dating_tracts_empirical_inds.pdf", width = 12, height = 8)
+pdf("dating_tracts_empirical_inds_mle.pdf", width = 12, height = 8)
 
 for (i in seq_along(all_inds)) {
   ind <- all_inds[i]
-  # cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
+  cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
+
+  ind_tracts_df <- filter(tracts_df, length >= min_length, name == ind)
+  sample_age <- unique(ind_tracts_df$sample_age)
+  age_group <- unique(ind_tracts_df$age_group)
+
+  p_tracts <-
+    ggplot() +
+    geom_histogram(
+      data = ind_tracts_df, aes(x = length, y = after_stat(density)),
+      binwidth = 10000, alpha = 0.75) +
+    # geom_density(
+    #   data = tracts_filt_df, aes(x = length, y = after_stat(density), fill = as.factor(sample_age)),
+    #   bw = 5000, alpha = 0.75, color = FALSE) +
+    labs(
+      x = "tract length [bp]", y = "density", fill = "age of sample",
+      title = "Distribution of introgressed tracts",
+      subtitle = paste0("name: ", ind, ", date: ", sample_age," years BP")
+    ) +
+    scale_x_continuous(labels = scales::comma) +
+    expand_limits(y = 0, x = 0) +
+    coord_cartesian(xlim = c(0, 2e6), ylim = c(0, 2e-5)) +
+    theme_minimal() +
+    theme(legend.position = "none", text = element_text(size = 15),
+          axis.text.x = element_text(hjust = 1, angle = 45))
+
+  r <- 1e-8
+  m <- 0.03
+  
+  exp_df <- group_by(ind_tracts_df, name) %>%
+    summarise(L = mean(length)) %>%
+    mutate(
+      sample_age = sample_age,
+      age_group = age_group,
+      lambda = 1 / (L - min_length),
+      t_gen = lambda / ((1 - m) * r) + 1,
+      t_before = t_gen * gen_time,
+      t_inferred = t_before + sample_age
+    )
+  
+  exp_decay <- function(lambda, max) {
+    data.frame(length = seq(0, max, by = 1000)) %>%
+      mutate(density = dexp(length, rate = lambda))
+  }
+  
+  predictions_df <-
+    exp_df %>%
+    select(name, lambda) %>%
+    rowwise() %>%
+    mutate(exp_data = list(exp_decay(lambda, max(ind_tracts_df$length)))) %>%
+    unnest(cols = c(exp_data)) %>%
+    select(-lambda)
+  
+  p_fit <- p_tracts +
+    geom_line(data = predictions_df, aes(x = length + min_length, y = density),
+              linetype = "dashed", linewidth = 0.75, color = "black") +
+    geom_text(data = exp_df,
+              aes(x = Inf, y = Inf, color = as.factor(sample_age),
+                  label = paste0(
+                    "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+                    "(", round(t_gen), " generations prior)"
+                  )),
+              hjust = 1.2, vjust = 8, size = 4)
+  
+  print(p_fit)
+
+  results_ind_mle[[length(results_ind_mle) + 1]] <- exp_df %>% mutate(min_length = min_length, fit = list(predictions_df))
+}
+
+dev.off()
+
+results_ind_mle_df <- do.call(rbind, results_ind_mle)
+```
+
+```{r}
+saveRDS(results_ind_mle_df, "dating_tracts_empirical_inds_mle.rds")
+```
+
+```{r}
+results_ind_mle_df <- readRDS("dating_tracts_empirical_inds_mle.rds")
+```
+
+```{r}
+results_ind_mle_df %>%
+ggplot(aes(age_group, t_inferred, color = age_group, group = name)) +
+  geom_jitter(alpha = 0.75) +
+  coord_cartesian(ylim = c(0, 150e3)) +
+  geom_hline(yintercept = 60e3, linetype = "dashed", color = "black") +
+  theme(axis.text.x = element_text(hjust = 1, angle = 45)) +
+  labs(x = "sample age group", y = "inferred admixture time",
+       title = "Inferred admixture time in different sample groups",
+       subtitle = "(Each dot is a single individual; assuming 27 years per generation)")
+```
+
+```{r}
+results_ind_mle_df %>%
+ggplot(aes(age_group, t_gen, color = age_group, group = name)) +
+  geom_jitter(alpha = 0.75) +
+  theme(axis.text.x = element_text(hjust = 1, angle = 45)) +
+  labs(x = "sample age group", y = "inferred admixture time",
+       title = "Inferred admixture time in different sample groups",
+       subtitle = "(Each dot is a single individual; assuming 27 years per generation)")
+```
+
+```{r}
+results_ind_mle_df %>%
+ggplot(aes(sample_age, t_gen, color = age_group)) +
+  geom_jitter(alpha = 0.75) +
+  geom_smooth(aes(group = 1)) +
+  theme(axis.text.x = element_text(hjust = 1, angle = 45)) +
+  labs(x = "sample age group", y = "inferred admixture time",
+       title = "Inferred admixture time in different sample groups",
+       subtitle = "(Each dot is a single individual; assuming 27 years per generation)")
+```
+
+```{r}
+name <- "Kostenki"
+name <- "HG00113"
+name <- "NEO283"
+
+ind_tracts_df <- tracts_df %>% filter(name == !!name) 
+ind_df <- filter(results_ind_mle_df, name == !!name)
+
+p_ind_tracts <- ind_tracts_df %>%
+  ggplot() +
+  geom_rect(aes(xmin = left, xmax = right, ymin = 0, ymax = 1)) +
+  expand_limits(x = 0) +
+  facet_wrap(~ chrom, scales = "free_x")
+
+p_ind_fit <- ggplot() +
+  geom_histogram(
+    data = ind_tracts_df, aes(x = length, y = after_stat(density)),
+    binwidth = 20000, alpha = 0.75
+  ) +
+  geom_line(data = ind_df$fit[[1]], aes(length + min_length, density)) +
+  geom_text(data = ind_df, aes(x = Inf, y = Inf,
+              label = paste0(
+                "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+                "(", round(t_gen), " generations prior)\n"
+              )),
+          hjust = 1.1, vjust = 2, size = 4) +
+  labs(
+    x = "tract length [bp]", y = "density", fill = "age of sample",
+    title = "Distribution of introgressed tracts",
+    subtitle = paste0("name: ", name, ", date: ", unique(ind_df$sample_age)," years BP")
+  ) 
+
+cowplot::plot_grid(p_ind_tracts, p_ind_fit, nrow = 1)
+```
+
+
+
+
+
+
+### Individual NLS estimates
+
+```{r}
+min_length <- 50e3
+
+results_ind_nls <- list()
+
+max_length <- Inf
+
+all_inds <- tracts_df %>% arrange(-sample_age) %>% pull(name) %>% unique
+
+pdf("dating_tracts_empirical_inds_nls.pdf", width = 12, height = 8)
+
+for (i in seq_along(all_inds)) {
+  ind <- all_inds[i]
+  cat(sprintf("Processing individual %s [%d/%d]\n", ind, i, length(all_inds)))
 
   ind_tracts_df <- filter(tracts_df, length >= min_length, name == ind)
   sample_age <- unique(ind_tracts_df$sample_age)
@@ -1358,8 +1650,8 @@ for (i in seq_along(all_inds)) {
           axis.text.x = element_text(hjust = 1, angle = 45))
   
   bin_data <- hist(ind_tracts_df$length, plot = FALSE, breaks = 101)
-  density <- bin_data$density[-1]
-  length <- bin_data$mids[-1][density > 0]
+  density <- bin_data$density
+  length <- bin_data$mids[density > 0]
   density <- density[density > 0]
   data_df <- tibble(length, density)
 
@@ -1399,32 +1691,31 @@ for (i in seq_along(all_inds)) {
               aes(x = Inf, y = Inf,
                   label = paste0(
                     "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
-                    "(", round(t_gens_before), " generations prior)\n"
+                    "(", round(t_before), " generations prior)\n"
                     #, ifelse(failed_nls, "MLE estimate", "NLS estimate")
                   )),
               hjust = 1.1, vjust = 2, size = 4)
   
   print(p_fit)
 
-  results_ind[[length(results_ind) + 1]] <- ind_df
+  results_ind_nls[[length(results_ind_nls) + 1]] <- ind_df
 }
 
 dev.off()
 
-results_ind_df <- do.call(rbind, results_ind)
+results_ind_nls_df <- do.call(rbind, results_ind_nls)
 ```
 
 ```{r}
-saveRDS(results_ind_df, "dating_tracts_empirical_inds.rds")
+saveRDS(results_ind_nls_df, "dating_tracts_empirical_inds_nls.rds")
 ```
 
 ```{r}
-results_ind_df <- readRDS("dating_tracts_empirical_inds.rds")
+results_ind_nls_df <- readRDS("dating_tracts_empirical_inds_nls.rds")
 ```
 
-
 ```{r}
-results_ind_df %>%
+results_ind_nls %>%
 ggplot(aes(age_group, t_inferred, color = age_group, group = name)) +
   geom_jitter(alpha = 0.75) +
   coord_cartesian(ylim = c(0, 150e3)) +
@@ -1436,7 +1727,7 @@ ggplot(aes(age_group, t_inferred, color = age_group, group = name)) +
 ```
 
 ```{r}
-results_ind_df %>%
+results_ind_nls %>%
 ggplot(aes(sample_age, t_inferred)) +
   geom_jitter(alpha = 0.5) +
   coord_cartesian(ylim = c(0, 150e3)) +
@@ -1458,7 +1749,7 @@ p_ind_tracts <- tracts_df %>%
   expand_limits(x = 0) +
   facet_wrap(~ chrom, scales = "free_x")
 
-ind_df <- filter(results_ind_df, name == !!name)
+ind_df <- filter(results_ind_nls, name == !!name)
 
 p_ind_fit <- ggplot() +
   geom_point(data = unnest(ind_df, data), aes(length, density)) +
