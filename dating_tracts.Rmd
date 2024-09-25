@@ -757,7 +757,7 @@ for (i in seq_along(all_inds)) {
   
   print(p_fit)
 
-  results_ind_mle[[length(results_ind_mle) + 1]] <- exp_df %>% mutate(min_length = min_length)
+  results_ind_mle[[length(results_ind_mle) + 1]] <- exp_df %>% mutate(min_length = min_length, fit = list(select(predictions_df, -name)))
 }
 
 dev.off()
@@ -777,19 +777,36 @@ ggplot(aes(factor(sample_age), t_inferred, group = sample_age)) +
 ```
 
 ```{r}
-name <- "EUR_1"
+name <- "EUR_150"
 
-tracts_df %>%
-  filter(name == !!name) %>%
+ind_tracts_df <- tracts_df %>% filter(name == !!name, length >= min_length) 
+ind_df <- filter(results_ind_mle_df, name == !!name)
+
+p_ind_tracts <- ind_tracts_df %>%
   ggplot() +
   geom_rect(aes(xmin = left, xmax = right, ymin = 0, ymax = 1)) +
-  scale_x_continuous(labels = scales::comma) +
-  xlab("position along a chromosome [bp]") +
-  theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) +
-  facet_wrap(~ node_id, nrow = 2,
-             labeller = labeller(node_id = function(x) paste0("individual '", name, "', haplotype #", x)))
-```
+  expand_limits(x = 0)
 
+p_ind_fit <- ggplot() +
+  geom_histogram(
+    data = ind_tracts_df, aes(x = length, y = after_stat(density)),
+    binwidth = 20000, alpha = 0.75
+  ) +
+  geom_line(data = ind_df$fit[[1]], aes(length + min_length, density)) +
+  geom_text(data = ind_df, aes(x = Inf, y = Inf,
+              label = paste0(
+                "estimated admixture at ", round(t_inferred / 1e3, 1), " kya\n",
+                "(", round(t_gen), " generations prior)\n"
+              )),
+          hjust = 1.1, vjust = 2, size = 4) +
+  labs(
+    x = "tract length [bp]", y = "density", fill = "age of sample",
+    title = "Distribution of introgressed tracts",
+    subtitle = paste0("name: ", name, ", date: ", unique(ind_df$sample_age)," years BP")
+  ) 
+
+cowplot::plot_grid(p_ind_tracts, p_ind_fit, nrow = 1)
+```
 
 
 
