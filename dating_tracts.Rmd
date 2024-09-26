@@ -681,6 +681,17 @@ inner_join(
 ### Individual MLE estimates
 
 ```{r}
+tracts_df <- tracts_df %>% mutate(chrom = "chr1") %>%
+  split(.$name) %>%
+  lapply(function(df) {
+    gr <- makeGRangesFromDataFrame(df, start.field = "left", end.field = "right", keep.extra.columns = TRUE) %>% reduce()
+    as.data.frame(gr) %>% select(chrom = seqnames, left = start, right = end, length = width) %>%
+      mutate(name = df$name[1], sample_age = df$sample_age[1])
+  }) %>%
+  do.call(rbind, .)
+```
+
+```{r}
 min_length <- 50e3
 
 results_ind_mle <- list()
@@ -777,7 +788,18 @@ ggplot(aes(factor(sample_age), t_inferred, group = sample_age)) +
 ```
 
 ```{r}
-name <- "EUR_150"
+results_ind_mle_df %>%
+ggplot(aes(sample_age, t_gen, color = factor(sample_age))) +
+  geom_jitter(alpha = 0.75) +
+  geom_smooth(aes(group = 1)) +
+  theme(axis.text.x = element_text(hjust = 1, angle = 45)) +
+  labs(x = "sample age group", y = "inferred admixture time",
+       title = "Inferred admixture time in different sample groups",
+       subtitle = "(Each dot is a single individual; assuming 27 years per generation)")
+```
+
+```{r}
+name <- "EUR_300"
 
 ind_tracts_df <- tracts_df %>% filter(name == !!name, length >= min_length) 
 ind_df <- filter(results_ind_mle_df, name == !!name)
@@ -799,6 +821,7 @@ p_ind_fit <- ggplot() +
                 "(", round(t_gen), " generations prior)\n"
               )),
           hjust = 1.1, vjust = 2, size = 4) +
+  expand_limits(x = 0) +
   labs(
     x = "tract length [bp]", y = "density", fill = "age of sample",
     title = "Distribution of introgressed tracts",
